@@ -1,0 +1,44 @@
+/node_modules
+/public/hot
+/public/storage
+/storage/*.key
+/vendor
+.env
+.env.backup
+.env.*
+!.env.example
+.phpunit.result.cache
+.phpunit.cache/
+docker-compose.override.yml
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/.idea
+/.vscode
+.DS_Store
+Thumbs.db
+
+# --- Security: runtime data & local captures (jangan push gambar/log user) ---
+/storage/app/check-captures
+/storage/app/label-capture
+/storage/app/references
+/storage/app/public
+/storage/framework/cache/data
+/storage/framework/sessions
+/storage/framework/views
+/storage/logs
+!storage/app/.gitignore
+!storage/framework/.gitignore
+!storage/logs/.gitignore
+
+# --- User request: kecualikan semua .md di folder planning (internal docs) ---
+planning/*.md
+planning/**/*.md
+
+# --- ROADMAP root dijadikan GitHub Issues, tidak di-push (internal SSOT) ---
+/ROADMAP_CHECKPOINT.md
+
+# --- Local AI tooling (bukan bagian app) ---
+.agents/
+skills-lock.json

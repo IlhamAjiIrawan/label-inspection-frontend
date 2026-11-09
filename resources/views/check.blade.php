@@ -171,6 +171,26 @@
                 </div>
 
                 <div id="check-camera-card" class="hidden mt-6">
+                    {{-- Camera selector & Live resolution toolbar --}}
+                    <div class="mb-3 p-3 bg-[#F8F9FA] rounded-xl border border-[#6C757D]/20 flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex items-center gap-2 flex-1 min-w-[240px]">
+                            <label for="check-camera-select" class="text-xs font-semibold text-[#212529] whitespace-nowrap flex items-center gap-1.5">
+                                <svg class="w-4 h-4 text-sky-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                </svg>
+                                Pilih Kamera:
+                            </label>
+                            <select id="check-camera-select" class="bg-white border border-[#6C757D]/30 text-[#212529] text-xs font-medium rounded-lg focus:ring-sky-500 focus:border-sky-500 block w-full p-2">
+                                <option value="">Mencari kamera...</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span id="check-camera-res-badge" class="hidden px-2.5 py-1 text-xs font-semibold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-300">
+                                -
+                            </span>
+                        </div>
+                    </div>
+
                     <div class="bg-[#212529] rounded-2xl overflow-hidden relative">
                         <video id="check-camera-preview" autoplay playsinline muted
                                class="w-full h-auto max-h-[70vh] object-contain bg-[#212529]"></video>

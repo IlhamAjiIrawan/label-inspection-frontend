@@ -11,6 +11,8 @@
     var TEMPLATE_KEY = 'label_template';
 
     var videoEl, cameraCard, statusBox, startBtn, stopBtn, cameraLabelEl;
+    var cameraSelectEl, cameraResBadgeEl;
+    var CAMERA_STORAGE_KEY = 'label_inspection_camera_id';
     var activeStream = null;
 
     var templateStep, scanStep, templateGrid, continueBtn, stepIndicator;
@@ -152,6 +154,65 @@
             : 'bg-[#E9ECEF] border border-[#6C757D]/30 text-[#212529]');
     }
 
+    function populateCameraSelect(currentDeviceId) {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices || !cameraSelectEl) return;
+
+        navigator.mediaDevices.enumerateDevices().then(function (devices) {
+            var videoDevices = devices.filter(function (d) { return d.kind === 'videoinput'; });
+            cameraSelectEl.innerHTML = '';
+
+            if (videoDevices.length === 0) {
+                var emptyOpt = document.createElement('option');
+                emptyOpt.value = '';
+                emptyOpt.textContent = 'Tidak ada kamera terdeteksi';
+                cameraSelectEl.appendChild(emptyOpt);
+                return;
+            }
+
+            var savedId = null;
+            try { savedId = localStorage.getItem(CAMERA_STORAGE_KEY); } catch (e) {}
+            var targetId = currentDeviceId || savedId;
+            var found = false;
+
+            videoDevices.forEach(function (device, idx) {
+                var opt = document.createElement('option');
+                opt.value = device.deviceId;
+                opt.textContent = device.label || ('Kamera ' + (idx + 1));
+                if (targetId && device.deviceId === targetId) {
+                    opt.selected = true;
+                    found = true;
+                }
+                cameraSelectEl.appendChild(opt);
+            });
+
+            if (!found && videoDevices.length > 0) {
+                cameraSelectEl.selectedIndex = 0;
+            }
+        }).catch(function (err) {
+            console.warn('Gagal membaca daftar kamera:', err);
+        });
+    }
+
+    function updateCameraResolutionBadge() {
+        if (!cameraResBadgeEl) return;
+        var w = (videoEl && videoEl.videoWidth) ? videoEl.videoWidth : 0;
+        var h = (videoEl && videoEl.videoHeight) ? videoEl.videoHeight : 0;
+        if ((!w || !h) && activeStream) {
+            var track = activeStream.getVideoTracks()[0];
+            if (track && track.getSettings) {
+                var s = track.getSettings();
+                w = s.width || 0;
+                h = s.height || 0;
+            }
+        }
+        if (w && h) {
+            cameraResBadgeEl.textContent = 'Resolusi: ' + w + ' × ' + h + ' px';
+            cameraResBadgeEl.classList.remove('hidden');
+        } else {
+            cameraResBadgeEl.classList.add('hidden');
+        }
+    }
+
     function stopCamera() {
         if (activeStream) {
             activeStream.getTracks().forEach(function (track) { track.stop(); });
@@ -161,23 +222,35 @@
         if (cameraCard) cameraCard.classList.add('hidden');
         if (startBtn) startBtn.classList.remove('hidden');
         if (statusBox) statusBox.textContent = '';
+        if (cameraResBadgeEl) cameraResBadgeEl.classList.add('hidden');
     }
 
-    function startCamera() {
+    function startCamera(preferredDeviceId, isRetry) {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             showStatus('Camera is not supported on this browser or the connection is not secure (HTTPS/localhost required).', 'error');
             return;
         }
 
+        var savedDeviceId = null;
+        try { savedDeviceId = localStorage.getItem(CAMERA_STORAGE_KEY); } catch (e) {}
+        var targetDeviceId = preferredDeviceId || savedDeviceId;
+
         startBtn.disabled = true;
         showStatus('Requesting camera...', 'info');
 
+        var videoConstraints = {
+            width: { ideal: 3840, min: 640 },
+            height: { ideal: 2160, min: 480 }
+        };
+
+        if (targetDeviceId) {
+            videoConstraints.deviceId = { exact: targetDeviceId };
+        } else {
+            videoConstraints.facingMode = { ideal: 'environment' };
+        }
+
         navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: { ideal: 'environment' },
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            },
+            video: videoConstraints,
             audio: false
         }).then(function (stream) {
             activeStream = stream;
@@ -187,13 +260,30 @@
             startBtn.disabled = false;
 
             var track = stream.getVideoTracks()[0];
-            cameraLabelEl.textContent = track && track.label ? track.label : 'Camera active';
+            var settings = (track && track.getSettings) ? track.getSettings() : {};
+            var activeDeviceId = settings.deviceId || targetDeviceId;
+            if (activeDeviceId) {
+                try { localStorage.setItem(CAMERA_STORAGE_KEY, activeDeviceId); } catch (e) {}
+            }
+
+            if (cameraLabelEl) {
+                cameraLabelEl.textContent = track && track.label ? track.label : 'Camera active';
+            }
+
+            populateCameraSelect(activeDeviceId);
+            updateCameraResolutionBadge();
 
             statusBox.textContent = '';
             statusBox.className = 'hidden';
 
             drawGuide();
         }).catch(function (error) {
+            if (targetDeviceId && !isRetry && (error.name === 'OverconstrainedError' || error.name === 'NotFoundError' || error.name === 'AbortError')) {
+                try { localStorage.removeItem(CAMERA_STORAGE_KEY); } catch (e) {}
+                console.warn('Kamera pilihan tidak tersedia, fallback ke kamera default...');
+                return startCamera(null, true);
+            }
+
             stopCamera();
             startBtn.disabled = false;
 
@@ -4404,6 +4494,8 @@
         startBtn = document.getElementById('start-scan-btn');
         stopBtn = document.getElementById('stop-scan-btn');
         cameraLabelEl = document.getElementById('camera-label');
+        cameraSelectEl = document.getElementById('camera-select');
+        cameraResBadgeEl = document.getElementById('camera-res-badge');
 
         templateStep = document.getElementById('template-step');
         scanStep = document.getElementById('scan-step');
@@ -4520,8 +4612,36 @@
             guideRange.addEventListener('change', _guideSliderRedraw);
         }
 
-        videoEl.addEventListener('loadedmetadata', drawGuide);
-        videoEl.addEventListener('canplay', drawGuide);
+        videoEl.addEventListener('loadedmetadata', function () {
+            drawGuide();
+            updateCameraResolutionBadge();
+        });
+        videoEl.addEventListener('canplay', function () {
+            drawGuide();
+            updateCameraResolutionBadge();
+        });
+
+        if (cameraSelectEl) {
+            cameraSelectEl.addEventListener('change', function () {
+                var selectedId = this.value;
+                if (!selectedId) return;
+                try { localStorage.setItem(CAMERA_STORAGE_KEY, selectedId); } catch (e) {}
+                if (activeStream) {
+                    activeStream.getTracks().forEach(function (track) { track.stop(); });
+                    activeStream = null;
+                    startCamera(selectedId);
+                }
+            });
+        }
+
+        if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+            navigator.mediaDevices.addEventListener('devicechange', function () {
+                var savedId = null;
+                try { savedId = localStorage.getItem(CAMERA_STORAGE_KEY); } catch (e) {}
+                populateCameraSelect(savedId);
+            });
+        }
+        populateCameraSelect();
         window.addEventListener('resize', onGuideResize);
         window.addEventListener('orientationchange', onGuideResize);
 

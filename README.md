@@ -69,7 +69,7 @@ redirect ke `/login` bila 401).
 
 ```powershell
 # 1. Clone & masuk direktori
-git clone https://github.com/ajidwi02/label-inspection-frontend.git
+git clone https://github.com/IlhamAjiIrawan/label-inspection-frontend.git
 cd label-inspection-frontend
 
 # 2. Install dependency PHP

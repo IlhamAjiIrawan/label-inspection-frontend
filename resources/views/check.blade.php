@@ -629,9 +629,22 @@
             {{-- Notifikasi external — hidden (dihapus) --}}
             <div id="check-preview-external-status" class="hidden"></div>
 
-            {{-- OCR Status — simple 'processing success' saja (CP-034b) --}}
-            <div id="check-ocr-status" class="hidden mt-4 p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-sm flex flex-col items-center gap-2">
-                <p id="check-ocr-title" class="font-semibold text-emerald-700 text-center">processing success</p>
+            {{-- OCR Status — Hasil Ringkasan Keseluruhan --}}
+            <div id="check-ocr-status" class="hidden mt-4 p-3.5 rounded-xl border bg-emerald-50 border-emerald-200 text-sm flex flex-col items-center gap-2.5 transition-all">
+                <p id="check-ocr-title" class="font-bold text-emerald-800 text-center text-sm md:text-base">processing success</p>
+                
+                {{-- Metrik Ringkasan Keberhasilan & Kemiripan --}}
+                <div id="check-ocr-metrics" class="hidden flex flex-wrap items-center justify-center gap-2">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white border border-emerald-300 text-emerald-800 shadow-xs">
+                        <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        Tingkat Keberhasilan: <strong id="check-ocr-stat-success-rate" class="ml-0.5">100%</strong>
+                    </span>
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white border border-sky-300 text-sky-800 shadow-xs">
+                        <svg class="w-3.5 h-3.5 text-sky-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                        Rata-rata Kemiripan: <strong id="check-ocr-stat-avg-similarity" class="ml-0.5">0%</strong>
+                    </span>
+                </div>
+
                 <button id="check-ocr-retry-poll-btn" type="button"
                         class="hidden inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 shadow-sm transition">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -650,6 +663,23 @@
                         <span class="text-[11px] text-[#6C757D]/70">Front · Label 1</span>
                         <img id="check-preview-thumb-1" alt="Front Label 1" class="hidden w-full h-full object-contain absolute inset-0" />
                     </div>
+                    {{-- Similarity Meter Box Slot 1 --}}
+                    <div id="check-preview-score-box-1" class="hidden mt-0.5 p-2 rounded-lg bg-[#F8F9FA] border border-[#6C757D]/15 text-xs flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="text-[#6C757D] font-medium">Kemiripan:</span>
+                            <span id="check-preview-score-val-1" class="font-bold text-[#212529]">-</span>
+                        </div>
+                        <div class="w-full bg-[#E9ECEF] rounded-full h-1.5 overflow-hidden">
+                            <div id="check-preview-score-bar-1" class="h-1.5 rounded-full bg-emerald-500 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px] text-[#6C757D]">
+                            <span id="check-preview-score-target-1">Target ≥85%</span>
+                            <button type="button" data-slot="1" class="check-detail-btn inline-flex items-center gap-0.5 text-[#0284C7] hover:underline font-semibold cursor-pointer">
+                                Detail
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div id="check-preview-slot-2" data-slot="2" data-side="front" class="flex flex-col gap-2 rounded-xl border border-[#6C757D]/20 bg-white p-2 md:p-3 transition-colors">
                     <p class="flex items-center gap-1.5 text-[11px] font-semibold text-[#212529]"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-[#0284C7] text-white border-[#0284C7]">FRONT</span> Label 2</p>
@@ -657,6 +687,23 @@
                     <div class="aspect-[16/10] min-h-[120px] sm:min-h-[140px] lg:min-h-[150px] overflow-hidden flex items-center justify-center relative rounded-lg bg-[#F8F9FA] border border-[#6C757D]/10">
                         <span class="text-[11px] text-[#6C757D]/70">Front · Label 2</span>
                         <img id="check-preview-thumb-2" alt="Front Label 2" class="hidden w-full h-full object-contain absolute inset-0" />
+                    </div>
+                    {{-- Similarity Meter Box Slot 2 --}}
+                    <div id="check-preview-score-box-2" class="hidden mt-0.5 p-2 rounded-lg bg-[#F8F9FA] border border-[#6C757D]/15 text-xs flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="text-[#6C757D] font-medium">Kemiripan:</span>
+                            <span id="check-preview-score-val-2" class="font-bold text-[#212529]">-</span>
+                        </div>
+                        <div class="w-full bg-[#E9ECEF] rounded-full h-1.5 overflow-hidden">
+                            <div id="check-preview-score-bar-2" class="h-1.5 rounded-full bg-emerald-500 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px] text-[#6C757D]">
+                            <span id="check-preview-score-target-2">Target ≥85%</span>
+                            <button type="button" data-slot="2" class="check-detail-btn inline-flex items-center gap-0.5 text-[#0284C7] hover:underline font-semibold cursor-pointer">
+                                Detail
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div id="check-preview-slot-3" data-slot="3" data-side="back" class="flex flex-col gap-2 rounded-xl border border-[#6C757D]/20 bg-white p-2 md:p-3 transition-colors">
@@ -666,6 +713,23 @@
                         <span class="text-[11px] text-[#6C757D]/70">Back · Label 1</span>
                         <img id="check-preview-thumb-3" alt="Back Label 1" class="hidden w-full h-full object-contain absolute inset-0" />
                     </div>
+                    {{-- Similarity Meter Box Slot 3 --}}
+                    <div id="check-preview-score-box-3" class="hidden mt-0.5 p-2 rounded-lg bg-[#F8F9FA] border border-[#6C757D]/15 text-xs flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="text-[#6C757D] font-medium">Kemiripan:</span>
+                            <span id="check-preview-score-val-3" class="font-bold text-[#212529]">-</span>
+                        </div>
+                        <div class="w-full bg-[#E9ECEF] rounded-full h-1.5 overflow-hidden">
+                            <div id="check-preview-score-bar-3" class="h-1.5 rounded-full bg-emerald-500 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px] text-[#6C757D]">
+                            <span id="check-preview-score-target-3">Target ≥85%</span>
+                            <button type="button" data-slot="3" class="check-detail-btn inline-flex items-center gap-0.5 text-[#0284C7] hover:underline font-semibold cursor-pointer">
+                                Detail
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div id="check-preview-slot-4" data-slot="4" data-side="back" class="flex flex-col gap-2 rounded-xl border border-[#6C757D]/20 bg-white p-2 md:p-3 transition-colors">
                     <p class="flex items-center gap-1.5 text-[11px] font-semibold text-[#212529]"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-[#0284C7] text-white border-[#0284C7]">BACK</span> Label 2</p>
@@ -673,6 +737,23 @@
                     <div class="aspect-[16/10] min-h-[120px] sm:min-h-[140px] lg:min-h-[150px] overflow-hidden flex items-center justify-center relative rounded-lg bg-[#F8F9FA] border border-[#6C757D]/10">
                         <span class="text-[11px] text-[#6C757D]/70">Back · Label 2</span>
                         <img id="check-preview-thumb-4" alt="Back Label 2" class="hidden w-full h-full object-contain absolute inset-0" />
+                    </div>
+                    {{-- Similarity Meter Box Slot 4 --}}
+                    <div id="check-preview-score-box-4" class="hidden mt-0.5 p-2 rounded-lg bg-[#F8F9FA] border border-[#6C757D]/15 text-xs flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="text-[#6C757D] font-medium">Kemiripan:</span>
+                            <span id="check-preview-score-val-4" class="font-bold text-[#212529]">-</span>
+                        </div>
+                        <div class="w-full bg-[#E9ECEF] rounded-full h-1.5 overflow-hidden">
+                            <div id="check-preview-score-bar-4" class="h-1.5 rounded-full bg-emerald-500 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px] text-[#6C757D]">
+                            <span id="check-preview-score-target-4">Target ≥85%</span>
+                            <button type="button" data-slot="4" class="check-detail-btn inline-flex items-center gap-0.5 text-[#0284C7] hover:underline font-semibold cursor-pointer">
+                                Detail
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 {{-- Slot 5 hidden compat --}}
@@ -694,7 +775,7 @@
                     <span id="check-process-text">Process</span>
                 </button>
             </div>
-            <p class="mt-2 text-center text-[11px] text-[#6C757D]">Process → OCR 4 label (Front 1·2 + Back 1·2) — hasil di console log (pail)</p>
+            <p class="mt-2 text-center text-[11px] text-[#6C757D]">Process → Memeriksa 4 label (Front 1·2 + Back 1·2) terhadap acuan referensi.</p>
         </div>
 
         {{-- Process overlay — popup blur saat Process → auto-direct ke Process Result --}}
@@ -703,6 +784,86 @@
                 <span aria-hidden="true" class="mx-auto block w-10 h-10 rounded-full border-[3px] border-[#6C757D]/30 border-t-[#0284C7] animate-spin"></span>
                 <p id="check-process-overlay-title" class="mt-4 text-sm font-bold text-[#212529]">Memproses 4 label…</p>
                 <p class="mt-1 text-xs text-[#6C757D]">Front 1·2 + Back 1·2 — menyiapkan Process Result</p>
+            </div>
+        </div>
+
+        {{-- Modal Rincian Kemiripan Label (Detail Comparison Modal) --}}
+        <div id="check-similarity-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-[#212529]/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="check-sim-modal-title">
+            <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-[#6C757D]/20 overflow-hidden flex flex-col max-h-[90vh] my-auto">
+                {{-- Modal Header --}}
+                <div class="px-5 py-4 border-b border-[#6C757D]/15 flex items-center justify-between bg-[#F8F9FA]">
+                    <div class="flex items-center gap-2.5">
+                        <span id="check-sim-modal-side-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold border bg-[#0284C7] text-white border-[#0284C7]">FRONT</span>
+                        <h3 id="check-sim-modal-title" class="text-base font-bold text-[#212529]">Rincian Kemiripan — FRONT Label 1</h3>
+                    </div>
+                    <button id="check-sim-modal-close" type="button" class="text-[#6C757D] hover:text-[#212529] p-1.5 rounded-lg hover:bg-[#E9ECEF] transition" title="Tutup">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                {{-- Modal Body (Scrollable) --}}
+                <div class="px-5 py-4 overflow-y-auto space-y-4">
+                    {{-- Metric summary cards --}}
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <div class="p-3 rounded-xl bg-[#F8F9FA] border border-[#6C757D]/15 text-center">
+                            <span class="block text-[11px] font-semibold text-[#6C757D]">Status</span>
+                            <span id="check-sim-modal-verdict" class="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-bold border">-</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-[#F8F9FA] border border-[#6C757D]/15 text-center">
+                            <span class="block text-[11px] font-semibold text-[#6C757D]">Skor Kemiripan</span>
+                            <span id="check-sim-modal-score" class="block mt-1 text-base font-extrabold text-[#212529]">-</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-[#F8F9FA] border border-[#6C757D]/15 text-center">
+                            <span class="block text-[11px] font-semibold text-[#6C757D]">Ambang Batas</span>
+                            <span id="check-sim-modal-threshold" class="block mt-1 text-base font-extrabold text-[#212529]">≥85%</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-[#F8F9FA] border border-[#6C757D]/15 text-center">
+                            <span class="block text-[11px] font-semibold text-[#6C757D]">Baris Cocok</span>
+                            <span id="check-sim-modal-matched-lines" class="block mt-1 text-base font-extrabold text-[#212529]">-</span>
+                        </div>
+                    </div>
+
+                    {{-- Progress bar --}}
+                    <div class="p-3 rounded-xl bg-[#F8F9FA] border border-[#6C757D]/15 flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="font-semibold text-[#212529]">Tingkat Kemiripan Teks</span>
+                            <span id="check-sim-modal-bar-pct" class="font-bold text-emerald-600">0%</span>
+                        </div>
+                        <div class="w-full bg-[#E9ECEF] rounded-full h-2.5 overflow-hidden">
+                            <div id="check-sim-modal-bar-fill" class="h-2.5 rounded-full bg-emerald-500 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    {{-- Perbedaan Baris (Diff Details) --}}
+                    <div>
+                        <h4 class="text-xs font-bold uppercase tracking-wide text-[#6C757D] mb-2 flex items-center justify-between">
+                            <span>Analisis Perbedaan Teks</span>
+                            <span id="check-sim-modal-diff-count" class="text-[11px] font-normal text-[#6C757D]">0 perbedaan</span>
+                        </h4>
+                        <div id="check-sim-modal-diff-container" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                            {{-- Dynamically populated --}}
+                        </div>
+                    </div>
+
+                    {{-- Komparasi Teks Lengkap (Acuan vs Hasil Scan) --}}
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                        <div>
+                            <h5 class="text-xs font-semibold text-[#212529] mb-1">Teks Acuan (Reference)</h5>
+                            <pre id="check-sim-modal-ref-text" class="p-3 rounded-xl bg-[#F8F9FA] border border-[#6C757D]/15 text-[11px] text-[#212529] font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">-</pre>
+                        </div>
+                        <div>
+                            <h5 class="text-xs font-semibold text-[#212529] mb-1">Teks Hasil Scan (OCR)</h5>
+                            <pre id="check-sim-modal-slot-text" class="p-3 rounded-xl bg-[#F8F9FA] border border-[#6C757D]/15 text-[11px] text-[#212529] font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">-</pre>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Modal Footer --}}
+                <div class="px-5 py-3 border-t border-[#6C757D]/15 bg-[#F8F9FA] flex justify-end">
+                    <button id="check-sim-modal-close-btn" type="button" class="px-4 py-2 rounded-xl border border-[#6C757D]/30 bg-white text-[#212529] text-xs font-semibold hover:bg-[#E9ECEF] transition cursor-pointer">
+                        Tutup
+                    </button>
+                </div>
             </div>
         </div>
     </div>

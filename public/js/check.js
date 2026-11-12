@@ -741,31 +741,102 @@
         return null;
     }
 
-    function checkRenderSlotStatus(slot, isMatch) {
-        var m = checkNormMatch(isMatch);
-        if (m === true) checkSetSlotBadge(slot, 'match', 'Matched', CHECK_ICON_CHECK);
-        else if (m === false) checkSetSlotBadge(slot, 'mismatch', 'Not Matched', CHECK_ICON_X);
+    function checkFormatPercent(score) {
+        if (score === undefined || score === null || isNaN(score)) return null;
+        var num = Number(score);
+        if (num <= 1.0 && num >= 0) num = num * 100;
+        var clamped = Math.min(100, Math.max(0, num));
+        return {
+            val: clamped,
+            text: (clamped % 1 === 0 ? clamped.toFixed(0) : clamped.toFixed(1)) + '%'
+        };
     }
 
-    // COMPARE_TEXT_SIMILARITY (2026-09-12): verdict teks reference-vs-slot.
-    // FAIL → "FAIL" merah, PASS → "PASS" hijau — tone & ikon SAMA seperti
-    // Matched/Not Matched di atas. SKIP → tone sky netral tanpa ikon spin.
+    function checkRenderSlotStatus(slot, isMatch, conf) {
+        var m = checkNormMatch(isMatch);
+        var pctObj = checkFormatPercent(conf);
+        var pctText = pctObj ? pctObj.text : null;
+
+        if (m === true) {
+            checkSetSlotBadge(slot, 'match', 'Matched' + (pctText ? ' · ' + pctText : ''), CHECK_ICON_CHECK);
+        } else if (m === false) {
+            checkSetSlotBadge(slot, 'mismatch', 'Not Matched' + (pctText ? ' · ' + pctText : ''), CHECK_ICON_X);
+        }
+
+        var scoreBox = document.getElementById('check-preview-score-box-' + slot);
+        var scoreVal = document.getElementById('check-preview-score-val-' + slot);
+        var scoreBar = document.getElementById('check-preview-score-bar-' + slot);
+        if (scoreBox && scoreVal && scoreBar && pctObj) {
+            scoreBox.classList.remove('hidden');
+            scoreVal.textContent = pctText;
+            scoreVal.className = m === true ? 'font-bold text-emerald-600' : 'font-bold text-[#E04438]';
+            scoreBar.className = m === true ? 'h-1.5 rounded-full bg-emerald-500 transition-all duration-500' : 'h-1.5 rounded-full bg-[#E04438] transition-all duration-500';
+            scoreBar.style.width = pctObj.val + '%';
+        }
+    }
+
+    // COMPARE_TEXT_SIMILARITY (2026-09-12 / 2026-11-12): verdict teks reference-vs-slot.
+    // Menampilkan persentase kemiripan teks langsung di badge & visual progress bar card
     var checkOcrVerdictSlots = {};
-    function checkRenderSlotVerdict(slot, verdict) {
-        if (!verdict || checkOcrVerdictSlots[slot]) return;
+    function checkRenderSlotVerdict(slot, verdict, score, extra) {
+        if (!verdict) return;
         checkOcrVerdictSlots[slot] = verdict;
-        if (verdict === 'PASS') checkSetSlotBadge(slot, 'match', 'PASS', CHECK_ICON_CHECK);
-        else if (verdict === 'FAIL') checkSetSlotBadge(slot, 'mismatch', 'FAIL', CHECK_ICON_X);
-        else if (verdict === 'SKIP') checkSetSlotBadge(slot, 'checking', 'SKIP', '');
+
+        var pctObj = checkFormatPercent(score);
+        var pctText = pctObj ? pctObj.text : null;
+        var badgeLabel = verdict + (pctText ? ' · ' + pctText : '');
+
+        if (verdict === 'PASS') {
+            checkSetSlotBadge(slot, 'match', badgeLabel, CHECK_ICON_CHECK);
+        } else if (verdict === 'FAIL') {
+            checkSetSlotBadge(slot, 'mismatch', badgeLabel, CHECK_ICON_X);
+        } else if (verdict === 'SKIP') {
+            checkSetSlotBadge(slot, 'checking', badgeLabel, '');
+        }
+
+        var scoreBox = document.getElementById('check-preview-score-box-' + slot);
+        var scoreVal = document.getElementById('check-preview-score-val-' + slot);
+        var scoreBar = document.getElementById('check-preview-score-bar-' + slot);
+        var scoreTarget = document.getElementById('check-preview-score-target-' + slot);
+
+        if (scoreBox && scoreVal && scoreBar) {
+            scoreBox.classList.remove('hidden');
+            if (pctObj) {
+                scoreVal.textContent = pctText;
+                if (verdict === 'PASS') {
+                    scoreVal.className = 'font-bold text-emerald-600';
+                    scoreBar.className = 'h-1.5 rounded-full bg-emerald-500 transition-all duration-500';
+                } else {
+                    scoreVal.className = 'font-bold text-[#E04438]';
+                    scoreBar.className = 'h-1.5 rounded-full bg-[#E04438] transition-all duration-500';
+                }
+                scoreBar.style.width = pctObj.val + '%';
+            } else {
+                scoreVal.textContent = '-';
+                scoreBar.style.width = '0%';
+            }
+            if (scoreTarget && extra && extra.threshold) {
+                var thrPct = Math.round(extra.threshold * 100);
+                scoreTarget.textContent = 'Target ≥' + thrPct + '%';
+            }
+        }
     }
 
     function checkRenderSlotPending(slot) {
         checkSetSlotBadge(slot, 'checking', 'Checking...', CHECK_ICON_SPIN);
+        var scoreBox = document.getElementById('check-preview-score-box-' + slot);
+        if (scoreBox) scoreBox.classList.add('hidden');
     }
 
     function checkResetSlotStatus() {
-        for (var i = 1; i <= checkSlotCount(); i++) checkSetSlotBadge(i, null);
+        for (var i = 1; i <= checkSlotCount(); i++) {
+            checkSetSlotBadge(i, null);
+            var scoreBox = document.getElementById('check-preview-score-box-' + i);
+            if (scoreBox) scoreBox.classList.add('hidden');
+        }
         checkOcrVerdictSlots = {};
+        var metricsEl = document.getElementById('check-ocr-metrics');
+        if (metricsEl) metricsEl.classList.add('hidden');
     }
 
     function checkEnterPreviewMode(session, external) {
@@ -1042,25 +1113,182 @@
     // PROGRESSIVE (2026-10-09): flag batch summary yang sudah di-log per batch_code.
     var checkBatchSummaryLogged = {};
 
-    // COMPARE_TEXT_SIMILARITY (2026-09-12): ringkasan verdict ke banner OCR.
-    // Tone banner tetap emerald seperti sebelumnya; hanya judul membawa hitungan.
+    // COMPARE_TEXT_SIMILARITY (2026-09-12 / 2026-11-12): ringkasan verdict ke banner OCR.
+    // Menampilkan total PASS/FAIL, % Keberhasilan Batch, dan % Rata-rata Kemiripan Teks
     function checkRenderOcrBannerSummary(capList) {
         var pass = 0, fail = 0, skip = 0;
-        for (var k = 0; k < capList.length; k++) {
-            var s = (capList[k] && capList[k].similarity) || null;
-            if (!s || !s.verdict) continue;
-            if (s.verdict === 'PASS') pass++;
-            else if (s.verdict === 'FAIL') fail++;
-            else skip++;
+        var totalScore = 0;
+        var scoreCount = 0;
+        for (var k = 0; k < (capList || []).length; k++) {
+            var c = capList[k];
+            var s = (c && c.similarity) || null;
+            if (s && s.verdict) {
+                if (s.verdict === 'PASS') pass++;
+                else if (s.verdict === 'FAIL') fail++;
+                else skip++;
+
+                if (s.score !== undefined && s.score !== null) {
+                    var sc = Number(s.score);
+                    if (sc <= 1.0) sc = sc * 100;
+                    totalScore += sc;
+                    scoreCount++;
+                }
+            } else if (c && c.is_match !== undefined && c.is_match !== null) {
+                if (c.is_match) pass++; else fail++;
+                if (c.confidence_score !== undefined && c.confidence_score !== null) {
+                    var conf = Number(c.confidence_score);
+                    if (conf <= 1.0) conf = conf * 100;
+                    totalScore += conf;
+                    scoreCount++;
+                }
+            }
         }
         if (!checkEl.ocrTitle) return;
         if (pass + fail + skip === 0) {
             checkEl.ocrTitle.textContent = 'processing success';
             return;
         }
-        var t = 'processing success — PASS ' + pass + ' · FAIL ' + fail;
+        var totalEval = pass + fail;
+        var successRate = totalEval > 0 ? Math.round((pass / totalEval) * 100) : 0;
+        var avgSim = scoreCount > 0 ? (totalScore / scoreCount).toFixed(1) : null;
+
+        var t = 'Inspeksi Selesai — PASS ' + pass + ' · FAIL ' + fail;
         if (skip > 0) t += ' · SKIP ' + skip;
         checkEl.ocrTitle.textContent = t;
+
+        var metricsEl = document.getElementById('check-ocr-metrics');
+        var successRateEl = document.getElementById('check-ocr-stat-success-rate');
+        var avgSimEl = document.getElementById('check-ocr-stat-avg-similarity');
+        if (metricsEl && successRateEl && avgSimEl) {
+            metricsEl.classList.remove('hidden');
+            successRateEl.textContent = successRate + '% (' + pass + '/' + (totalEval || 1) + ' PASS)';
+            avgSimEl.textContent = avgSim !== null ? avgSim + '%' : '-';
+        }
+    }
+
+    function checkCloseSimilarityDetailModal() {
+        var modal = document.getElementById('check-similarity-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    function checkOpenSimilarityDetailModal(slot) {
+        var modal = document.getElementById('check-similarity-modal');
+        if (!modal) return;
+
+        var cap = null;
+        for (var i = 0; i < (checkLastCaps || []).length; i++) {
+            if (checkLastCaps[i].slot_number == slot) {
+                cap = checkLastCaps[i];
+                break;
+            }
+        }
+
+        var side = (cap && cap.side) ? cap.side : (slot <= 2 ? 'front' : 'back');
+        var sideLabel = String(side || '').toUpperCase();
+        var slotInSide = (slot === 1 || slot === 3) ? 'Label 1' : 'Label 2';
+
+        var sideBadge = document.getElementById('check-sim-modal-side-badge');
+        var titleEl = document.getElementById('check-sim-modal-title');
+        if (sideBadge) sideBadge.textContent = sideLabel;
+        if (titleEl) titleEl.textContent = 'Rincian Kemiripan — ' + sideLabel + ' ' + slotInSide;
+
+        var sim = (cap && cap.similarity) ? cap.similarity : {};
+        var verdict = sim.verdict || (cap && cap.is_match !== undefined && cap.is_match !== null ? (cap.is_match ? 'PASS' : 'FAIL') : 'Belum Selesai');
+        var rawScore = (sim && sim.score !== undefined && sim.score !== null) ? sim.score : (cap ? cap.confidence_score : null);
+
+        var pctObj = checkFormatPercent(rawScore);
+        var pctText = pctObj ? pctObj.text : '-';
+
+        // Verdict Badge
+        var verdictEl = document.getElementById('check-sim-modal-verdict');
+        if (verdictEl) {
+            verdictEl.textContent = verdict;
+            if (verdict === 'PASS') {
+                verdictEl.className = 'inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-bold border border-emerald-300 bg-emerald-50 text-emerald-700';
+            } else if (verdict === 'FAIL') {
+                verdictEl.className = 'inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-bold border border-[#E04438]/30 bg-[#E04438]/10 text-[#E04438]';
+            } else {
+                verdictEl.className = 'inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-bold border border-sky-300 bg-sky-50 text-sky-700';
+            }
+        }
+
+        // Metric Values
+        var scoreEl = document.getElementById('check-sim-modal-score');
+        var thrEl = document.getElementById('check-sim-modal-threshold');
+        var linesEl = document.getElementById('check-sim-modal-matched-lines');
+        var barPct = document.getElementById('check-sim-modal-bar-pct');
+        var barFill = document.getElementById('check-sim-modal-bar-fill');
+
+        if (scoreEl) scoreEl.textContent = pctText;
+        if (thrEl) {
+            var thr = (sim && sim.threshold !== undefined) ? '≥' + Math.round(sim.threshold * 100) + '%' : '≥85%';
+            thrEl.textContent = thr;
+        }
+        if (linesEl) {
+            var matched = (sim && sim.matched_lines !== undefined) ? sim.matched_lines : '-';
+            var refL = (sim && sim.ref_lines !== undefined) ? sim.ref_lines : '-';
+            linesEl.textContent = matched + ' / ' + refL + ' baris';
+        }
+        if (barPct) barPct.textContent = pctText;
+        if (barFill) {
+            var fillVal = pctObj ? pctObj.val : 0;
+            barFill.style.width = fillVal + '%';
+            if (verdict === 'PASS') {
+                barFill.className = 'h-2.5 rounded-full bg-emerald-500 transition-all duration-500';
+                if (barPct) barPct.className = 'font-bold text-emerald-600';
+            } else {
+                barFill.className = 'h-2.5 rounded-full bg-[#E04438] transition-all duration-500';
+                if (barPct) barPct.className = 'font-bold text-[#E04438]';
+            }
+        }
+
+        // Diff details
+        var diffContainer = document.getElementById('check-sim-modal-diff-container');
+        var diffCountEl = document.getElementById('check-sim-modal-diff-count');
+        if (diffContainer) {
+            diffContainer.innerHTML = '';
+            var diffs = (sim && sim.diff_details && Array.isArray(sim.diff_details)) ? sim.diff_details : [];
+            if (diffCountEl) diffCountEl.textContent = diffs.length + ' perbedaan';
+
+            if (diffs.length === 0) {
+                if (verdict === 'PASS') {
+                    diffContainer.innerHTML = '<div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 flex items-center gap-2"><svg class="w-4 h-4 shrink-0 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><span>Semua baris teks cocok sempurna dengan label acuan referensi.</span></div>';
+                } else {
+                    diffContainer.innerHTML = '<div class="p-3 rounded-xl bg-[#F8F9FA] border border-[#6C757D]/15 text-xs text-[#6C757D]">Tidak ada perbedaan spesifik per baris atau teks belum siap.</div>';
+                }
+            } else {
+                diffs.forEach(function (d) {
+                    var item = document.createElement('div');
+                    item.className = 'p-2.5 rounded-xl border text-xs flex flex-col gap-1 ';
+                    if (d.type === 'changed') {
+                        item.className += 'bg-amber-50/70 border-amber-200 text-amber-900';
+                        item.innerHTML = '<div class="flex items-center gap-1.5 font-semibold text-[11px] text-amber-700"><span class="px-1.5 py-0.5 rounded bg-amber-200 text-amber-800 text-[10px] font-bold">CHANGED</span> Baris ' + (d.ref_line_num || '?') + ' → ' + (d.check_line_num || '?') + '</div>' +
+                            '<div class="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] mt-0.5"><div class="text-[#6C757D]">Acuan: <span class="font-mono text-[#212529] font-medium">"' + (d.ref_text || '') + '"</span></div><div class="text-[#6C757D]">Check: <span class="font-mono text-amber-800 font-medium">"' + (d.check_text || '') + '"</span></div></div>';
+                    } else if (d.type === 'missing') {
+                        item.className += 'bg-rose-50/70 border-rose-200 text-rose-900';
+                        item.innerHTML = '<div class="flex items-center gap-1.5 font-semibold text-[11px] text-[#E04438]"><span class="px-1.5 py-0.5 rounded bg-rose-200 text-rose-800 text-[10px] font-bold">MISSING</span> Baris ' + (d.ref_line_num || '?') + ' (tidak ada di scan)</div>' +
+                            '<div class="text-[11px] font-mono text-rose-800 font-medium mt-0.5">"' + (d.ref_text || '') + '"</div>';
+                    } else if (d.type === 'added') {
+                        item.className += 'bg-sky-50/70 border-sky-200 text-sky-900';
+                        item.innerHTML = '<div class="flex items-center gap-1.5 font-semibold text-[11px] text-[#0284C7]"><span class="px-1.5 py-0.5 rounded bg-sky-200 text-sky-800 text-[10px] font-bold">ADDED</span> Baris ' + (d.check_line_num || '?') + ' (tambahan di scan)</div>' +
+                            '<div class="text-[11px] font-mono text-sky-800 font-medium mt-0.5">"' + (d.check_text || '') + '"</div>';
+                    }
+                    diffContainer.appendChild(item);
+                });
+            }
+        }
+
+        // Raw / Cleaned Texts
+        var refTextEl = document.getElementById('check-sim-modal-ref-text');
+        var slotTextEl = document.getElementById('check-sim-modal-slot-text');
+        if (refTextEl) {
+            refTextEl.textContent = (cap && cap.reference_excerpt) ? cap.reference_excerpt : '(Teks acuan referensi)';
+        }
+        if (slotTextEl) {
+            slotTextEl.textContent = (cap && (cap.cleaned_text || cap.raw_text)) ? (cap.cleaned_text || cap.raw_text) : '-';
+        }
+
+        modal.classList.remove('hidden');
     }
 
     function checkFetchLatestSessionStatus(sessionId) {
@@ -1092,9 +1320,9 @@
                 var slot = c.slot_number;
                 var sim = c.similarity || null;
                 if (sim && sim.verdict) {
-                    checkRenderSlotVerdict(slot, sim.verdict);
+                    checkRenderSlotVerdict(slot, sim.verdict, sim.score, sim, c);
                 } else if (c.is_match !== undefined && c.is_match !== null) {
-                    checkRenderSlotStatus(slot, c.is_match);
+                    checkRenderSlotStatus(slot, c.is_match, c.confidence_score);
                 } else {
                     allDone = false;
                 }
@@ -1203,7 +1431,7 @@
                         var br=batchResults[bi]; if(!checkOcrLoggedSlots[br.slot]){
                             checkOcrLoggedSlots[br.slot]=true;
                             console.log('[CHECK] Slot '+br.slot+': is_match='+br.is_match+' confidence='+br.confidence_score+' notes='+JSON.stringify((br.notes||'').substring(0,200)));
-                            checkRenderSlotStatus(br.slot, br.is_match);
+                            checkRenderSlotStatus(br.slot, br.is_match, br.confidence_score);
                         }
                     }
                 }
@@ -1220,7 +1448,7 @@
                         checkOcrLoggedSlots[slot]=true;
                         console.log('[CHECK] Slot '+slot+': is_match='+isMatch+' confidence='+conf+' notes='+JSON.stringify((notes||'').substring(0,200)));
                         console.log('[CHECK] Slot '+slot+' full', {batch_code:batchCode,slot:slot,is_match:isMatch,confidence_score:conf,notes:notes,filename:c.filename_original, compare_result:(c.compare_result||null)});
-                        checkRenderSlotStatus(slot, isMatch);
+                        checkRenderSlotStatus(slot, isMatch, conf);
                     } else if(cleaned !== null && cleaned !== undefined && !checkOcrLoggedSlots[slot]){
                         checkOcrLoggedSlots[slot] = true;
                         var isEmpty = (cleaned === '' || c.ocr_status === 'empty');
@@ -1384,7 +1612,7 @@
                                 console.log('=== END PERBANDINGAN: ' + plabel + ' ===');
                             })();
                             // Tampilkan badge PASS/FAIL/SKIP di kartu slot (dashboard Checking Label).
-                            checkRenderSlotVerdict(slot, sim.verdict);
+                            checkRenderSlotVerdict(slot, sim.verdict, sim.score, sim, c);
                             // TOLERANSI TANDA BACA (2026-10-09): perbedaan menyentuh
                             // digit angka (desimal/kode) wajib verifikasi manual
                             // walau verdict PASS — flag aditif dari FastAPI.
@@ -1522,7 +1750,7 @@
                 for(var i=0;i<resArr.length;i++){
                     var rr=resArr[i];
                     console.log('[CHECK] Slot ' + rr.slot + ': is_match=' + rr.is_match + ' confidence=' + rr.confidence_score + ' notes=' + JSON.stringify((rr.notes||'').substring(0,200)));
-                    checkRenderSlotStatus(rr.slot, rr.is_match);
+                    checkRenderSlotStatus(rr.slot, rr.is_match, rr.confidence_score);
                 }
                 if (resArr.length === checkSlotCount()) {
                     var ocr = checkEl.ocrStatus;
@@ -3921,6 +4149,34 @@
                 checkFetchLatestSessionStatus();
             });
         }
+
+        // Similarity Detail Modal event listeners
+        var previewCard = document.getElementById('check-preview-card');
+        if (previewCard) {
+            previewCard.addEventListener('click', function (e) {
+                var btn = e.target.closest('.check-detail-btn');
+                if (btn) {
+                    e.preventDefault();
+                    var slot = btn.getAttribute('data-slot');
+                    if (slot) checkOpenSimilarityDetailModal(parseInt(slot, 10));
+                }
+            });
+        }
+        var simModal = document.getElementById('check-similarity-modal');
+        var simClose1 = document.getElementById('check-sim-modal-close');
+        var simClose2 = document.getElementById('check-sim-modal-close-btn');
+        if (simClose1) simClose1.addEventListener('click', checkCloseSimilarityDetailModal);
+        if (simClose2) simClose2.addEventListener('click', checkCloseSimilarityDetailModal);
+        if (simModal) {
+            simModal.addEventListener('click', function (e) {
+                if (e.target === simModal) checkCloseSimilarityDetailModal();
+            });
+        }
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && simModal && !simModal.classList.contains('hidden')) {
+                checkCloseSimilarityDetailModal();
+            }
+        });
         // Dual-side retake buttons
         if (checkEl.retakeFrontBtn) checkEl.retakeFrontBtn.addEventListener('click', function() { checkDualRetake('front'); });
         if (checkEl.retakeBackBtn) checkEl.retakeBackBtn.addEventListener('click', function() { checkDualRetake('back'); });

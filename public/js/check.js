@@ -1063,6 +1063,62 @@
         checkEl.ocrTitle.textContent = t;
     }
 
+    function checkFetchLatestSessionStatus(sessionId) {
+        var token = checkGetToken();
+        var sid = sessionId || checkLastSessionId;
+        if (!sid) { try { sid = sessionStorage.getItem('last_check_session_id'); } catch (e) {} }
+        if (!token || !sid) return;
+
+        var retryBtn = document.getElementById('check-ocr-retry-poll-btn');
+        if (retryBtn) {
+            retryBtn.disabled = true;
+            retryBtn.textContent = 'Memeriksa status...';
+        }
+
+        fetch('/api/check/sessions/' + encodeURIComponent(sid), {
+            headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
+        }).then(function (res) { return res.json(); }).then(function (j) {
+            if (retryBtn) {
+                retryBtn.disabled = false;
+                retryBtn.innerHTML = '<svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Cek Ulang Status Hasil';
+            }
+            if (!j || !j.data) return;
+            var caps = j.data.captures || [];
+            checkLastCaps = caps;
+            var allDone = true;
+
+            for (var i = 0; i < caps.length; i++) {
+                var c = caps[i];
+                var slot = c.slot_number;
+                var sim = c.similarity || null;
+                if (sim && sim.verdict) {
+                    checkRenderSlotVerdict(slot, sim.verdict);
+                } else if (c.is_match !== undefined && c.is_match !== null) {
+                    checkRenderSlotStatus(slot, c.is_match);
+                } else {
+                    allDone = false;
+                }
+            }
+
+            if (allDone && caps.length >= checkSlotCount()) {
+                if (retryBtn) retryBtn.classList.add('hidden');
+                checkRenderOcrBannerSummary(caps);
+                checkFeedback('Semua label selesai diperiksa!', false);
+                checkSetProcessBusy(false);
+                if (checkEl.processBtn) checkEl.processBtn.disabled = false;
+            } else {
+                checkFeedback('Pemeriksaan sebagian masih berlangsung di server. Melanjutkan polling...', false);
+                checkPollOcrBrowserLog(sid);
+            }
+        }).catch(function (err) {
+            if (retryBtn) {
+                retryBtn.disabled = false;
+                retryBtn.textContent = 'Cek Ulang Status Hasil';
+            }
+            console.error('[CHECK] Gagal fetch status session:', err);
+        });
+    }
+
     function checkPollOcrBrowserLog(sessionId) {
         if (checkOcrPollTimer) { try { clearInterval(checkOcrPollTimer); } catch (e) {} checkOcrPollTimer = null; }
         checkOcrLoggedSlots = {};
@@ -1071,7 +1127,7 @@
         var token = checkGetToken();
         if (!token || !sessionId) return;
         var attempts = 0;
-        var maxAttempts = 90; // 180s total (2s x 90) — Visual Compare via Gemini butuh 38-160s (lihat processing_time_seconds di compare_result.json), polling 30s selalu timeout sebelum callback tiba
+        var maxAttempts = 150; // 300s total (2s x 150) — batas polling 5 menit
         console.log('[CHECK] OCR Browser Polling started for session', sessionId, '— hasil per slot akan tampil di console ini');
         checkOcrPollTimer = setInterval(function () {
             attempts++;
@@ -1081,7 +1137,7 @@
                 // Update banner akhir jika belum semua slot ter-log
                 var loggedCount = Object.keys(checkOcrLoggedSlots).length;
                 if (loggedCount < GUIDE_COLS) {
-                    console.warn('[CHECK] OCR Browser Polling: hanya ' + loggedCount + '/' + GUIDE_COLS + ' slot diterima dalam 180s — cek pail / laravel.log');
+                    console.warn('[CHECK] OCR Browser Polling: hanya ' + loggedCount + '/' + GUIDE_COLS + ' slot diterima dalam 300s — cek pail / laravel.log');
                 }
                 // COMPARE_TEXT_SIMILARITY (2026-09-12): spinner WAJIB berhenti di sini
                 // (sebelumnya terus berputar). Banner tampilkan verdict yang sudah masuk.
@@ -1089,13 +1145,15 @@
                 if (checkEl.processBtn) checkEl.processBtn.disabled = false;
                 var ocrTO = checkEl.ocrStatus;
                 if (ocrTO) {
-                    ocrTO.className = 'mt-4 p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-sm';
+                    ocrTO.className = 'mt-4 p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-sm flex flex-col items-center gap-2';
                     ocrTO.classList.remove('hidden');
                     checkRenderOcrBannerSummary(checkLastCaps);
                     if (checkEl.ocrTitle && /processing success/.test(checkEl.ocrTitle.textContent)) {
                         checkEl.ocrTitle.textContent += ' (timeout — sebagian slot belum diterima)';
                     }
                 }
+                var retryBtn = document.getElementById('check-ocr-retry-poll-btn');
+                if (retryBtn) retryBtn.classList.remove('hidden');
                 return;
             }
             fetch('/api/check/sessions/' + encodeURIComponent(sessionId), {
@@ -1399,11 +1457,13 @@
                     checkLogCompareSummary(caps);
                     var ocr = checkEl.ocrStatus;
                     if (ocr) {
-                        ocr.className = 'mt-4 p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-sm';
+                        ocr.className = 'mt-4 p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-sm flex flex-col items-center gap-2';
                         ocr.classList.remove('hidden');
                         // COMPARE_TEXT_SIMILARITY (2026-09-12): judul bawa hitungan verdict.
                         checkRenderOcrBannerSummary(caps);
                     }
+                    var retryBtn = document.getElementById('check-ocr-retry-poll-btn');
+                    if (retryBtn) retryBtn.classList.add('hidden');
                     checkSetProcessBusy(false);
                     if (checkEl.processBtn) checkEl.processBtn.disabled = false;
                 } else if (allDone && batchResults && batchResults.length === GUIDE_COLS) {
@@ -1412,11 +1472,13 @@
                     checkLogCompareSummary(caps);
                     var ocr2 = checkEl.ocrStatus;
                     if (ocr2) {
-                        ocr2.className = 'mt-4 p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-sm';
+                        ocr2.className = 'mt-4 p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-sm flex flex-col items-center gap-2';
                         ocr2.classList.remove('hidden');
                         // COMPARE_TEXT_SIMILARITY (2026-09-12): judul bawa hitungan verdict.
                         checkRenderOcrBannerSummary(caps);
                     }
+                    var retryBtn2 = document.getElementById('check-ocr-retry-poll-btn');
+                    if (retryBtn2) retryBtn2.classList.add('hidden');
                     checkSetProcessBusy(false);
                     if (checkEl.processBtn) checkEl.processBtn.disabled = false;
                 }
@@ -3852,6 +3914,13 @@
             if (checkEl.processBtn.disabled) return;
             checkHandleProcess();
         });
+        var retryPollBtn = document.getElementById('check-ocr-retry-poll-btn');
+        if (retryPollBtn) {
+            retryPollBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                checkFetchLatestSessionStatus();
+            });
+        }
         // Dual-side retake buttons
         if (checkEl.retakeFrontBtn) checkEl.retakeFrontBtn.addEventListener('click', function() { checkDualRetake('front'); });
         if (checkEl.retakeBackBtn) checkEl.retakeBackBtn.addEventListener('click', function() { checkDualRetake('back'); });

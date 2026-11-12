@@ -630,8 +630,15 @@
             <div id="check-preview-external-status" class="hidden"></div>
 
             {{-- OCR Status — simple 'processing success' saja (CP-034b) --}}
-            <div id="check-ocr-status" class="hidden mt-4 p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-sm">
+            <div id="check-ocr-status" class="hidden mt-4 p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-sm flex flex-col items-center gap-2">
                 <p id="check-ocr-title" class="font-semibold text-emerald-700 text-center">processing success</p>
+                <button id="check-ocr-retry-poll-btn" type="button"
+                        class="hidden inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 shadow-sm transition">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Cek Ulang Status Hasil
+                </button>
             </div>
 
             {{-- Grid 4 capture — FRONT 1·2 + BACK 1·2 sejajar 1 baris di desktop (lg:4), 2x2 di HP/tablet --}}

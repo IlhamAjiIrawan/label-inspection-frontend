@@ -198,8 +198,9 @@
                             <span class="w-2 h-2 rounded-full bg-sky-500 animate-pulse"></span>
                             <span class="text-white text-xs font-semibold tracking-wide">LIVE</span>
                         </div>
+                        {{-- Canvas overlay panduan dinonaktifkan sementara untuk evaluasi Pilihan C (Free Placement) --}}
                         <canvas id="check-guide-overlay" aria-hidden="true"
-                                 class="pointer-events-none absolute inset-0 w-full h-full"></canvas>
+                                 class="hidden pointer-events-none absolute inset-0 w-full h-full"></canvas>
                         {{-- Mini Front preview dihapus (Stage 2 minimalist): badge ukuran tetap satu-satunya di kanan atas --}}
                         {{-- Guide size badge (top-right) — shows template info + FRONT/BACK --}}
                         <span id="check-guide-size-badge"
@@ -214,15 +215,19 @@
                         </div>
                     </div>
 
-                    <div class="mt-4 flex items-center gap-3">
+                    {{-- Metode Browser Canvas Slider disembunyikan untuk evaluasi Pilihan C --}}
+                    <div class="hidden mt-4 items-center gap-3">
                         <label for="check-guide-size-range" class="text-sm font-medium text-[#212529] whitespace-nowrap">Frame size</label>
                         <input id="check-guide-size-range" type="range" min="20" max="100" step="1" value="100"
                                class="flex-1 sm:flex-none sm:w-56 accent-sky-600 cursor-pointer" />
                         <span id="check-guide-size-value" class="text-xs font-semibold text-[#6C757D] w-10">100%</span>
                     </div>
-                    <p class="mt-1 text-xs text-[#6C757D]">
-                        Posisikan label aktual agar pas di dalam frame. Frame horizontal tetap 160×35 mm. Atur SEBELUM Capture — Retake untuk atur ulang.
-                    </p>
+                    <div class="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center gap-2.5">
+                        <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-500 text-white text-xs font-bold shrink-0">!</span>
+                        <div class="text-xs text-amber-900 leading-relaxed">
+                            <strong class="font-semibold">Mode Kamera Bebas (Tanpa Canvas Guide Box):</strong> Metode pembatasan canvas browser telah dinonaktifkan sementara. Kamera menangkap gambar utuh resolusi tinggi (*Full Frame*) untuk menguji efektivitas deteksi region otomatis (Pilihan C).
+                        </div>
+                    </div>
 
                     <div class="mt-4 flex items-center justify-between flex-wrap gap-3">
                         <p id="check-camera-label" class="text-sm text-[#6C757D]">-</p>

@@ -973,6 +973,7 @@ class ReferenceController extends Controller
             'template_id' => 'nullable|string|max:32',
             'page'        => 'nullable|integer|min:1|max:1000',
             'per_page'    => 'nullable|integer|min:1|max:50',
+            'fresh'       => 'nullable|boolean',
         ]);
 
         $q = trim($validated['q'] ?? '');
@@ -980,6 +981,7 @@ class ReferenceController extends Controller
         $page = (int) ($validated['page'] ?? 1);
         $perPage = (int) ($validated['per_page'] ?? 20);
         $perPage = max(1, min(50, $perPage));
+        $forceFresh = $request->boolean('fresh') || $request->has('nocache');
 
         // Versi cache ikut kunci: tiap mutasi library (push/import/delete) menaikkan
         // versi agar daftar langsung segar (tanpa ini basi hingga 60 detik).
@@ -987,10 +989,31 @@ class ReferenceController extends Controller
         try { $libVer = (int) Cache::get('ref-library:version', 0); } catch (\Exception $e) {}
         $cacheKey = 'ref-library:v' . $libVer . ':' . md5(json_encode([$q, $templateId, $page, $perPage]));
 
-        $result = Cache::remember($cacheKey, 60, function () use ($q, $templateId, $page, $perPage) {
+        $result = $forceFresh ? null : Cache::get($cacheKey);
+
+        // Jika data cache mengandung item dengan ocr_status pending, jangan pakai data basi;
+        // ambil langsung dari FastAPI agar status selesai OCR segera terrefleksi.
+        if ($result !== null && is_array($result)) {
+            $hasPendingInCached = collect($result['items'] ?? [])->contains(function ($it) {
+                return ($it['ocr_status'] ?? '') === 'pending';
+            });
+            if ($hasPendingInCached) {
+                $result = null; // paksa re-fetch dari FastAPI
+            }
+        }
+
+        if ($result === null) {
             $library = new FastApiReferenceLibrary();
-            return $library->listLibrary($q, $templateId, $page, $perPage);
-        });
+            $result = $library->listLibrary($q, $templateId, $page, $perPage);
+            if ($result !== null) {
+                $hasPending = collect($result['items'] ?? [])->contains(function ($it) {
+                    return ($it['ocr_status'] ?? '') === 'pending';
+                });
+                // TTL pendek (3 detik) jika masih ada proses OCR pending; 60 detik jika semua stabil.
+                $ttl = $hasPending ? 3 : 60;
+                try { Cache::put($cacheKey, $result, $ttl); } catch (\Exception $e) {}
+            }
+        }
 
         if ($result === null) {
             return response()->json([

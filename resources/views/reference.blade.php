@@ -108,10 +108,18 @@
 
             <p class="mt-4 text-xs text-[#6C757D]">Daftar label reference tersimpan di Library — pilih untuk dipakai tanpa scan ulang.</p>
 
-            <div class="mt-4">
-                <input id="choose-search" type="search" autocomplete="off"
-                       placeholder="Cari nama / template / filename..."
-                       class="w-full px-4 py-2.5 rounded-xl bg-[#F8F9FA] border border-[#6C757D]/30 text-sm text-[#212529] placeholder-[#6C757D]/60 focus:outline-none focus:ring-2 focus:ring-sky-300" />
+            <div class="mt-4 flex items-center gap-2">
+                <div class="relative flex-1">
+                    <input id="choose-search" type="search" autocomplete="off"
+                           placeholder="Cari nama / template / filename..."
+                           class="w-full px-4 py-2.5 rounded-xl bg-[#F8F9FA] border border-[#6C757D]/30 text-sm text-[#212529] placeholder-[#6C757D]/60 focus:outline-none focus:ring-2 focus:ring-sky-300" />
+                </div>
+                <button id="choose-refresh-btn" type="button" title="Segarkan status &amp; daftar reference" aria-label="Segarkan status &amp; daftar reference"
+                        class="p-2.5 rounded-xl border border-[#6C757D]/30 bg-[#F8F9FA] hover:bg-[#E9ECEF] text-[#6C757D] hover:text-[#212529] transition flex items-center justify-center shrink-0">
+                    <svg id="choose-refresh-icon" class="w-5 h-5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </button>
             </div>
 
             <div id="choose-loading" class="hidden mt-6 flex items-center gap-2 text-sm text-[#6C757D]">

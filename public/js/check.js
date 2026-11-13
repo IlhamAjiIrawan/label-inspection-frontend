@@ -1872,6 +1872,8 @@
         }
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, cw, ch);
+        // [EVALUASI-PILIHAN-C]: Kosongkan canvas & lewati kotak guide statis agar tampilan video 100% bebas
+        return;
 
         var result = checkGetGuideBoxes();
         if (!result) return;
@@ -3427,18 +3429,12 @@
             return;
         }
 
-        // Capture the current guide box area
-        var scaleX = video.videoWidth / result.content.w;
-        var scaleY = video.videoHeight / result.content.h;
-        var box = result.boxes[0]; // Only 1 box (GUIDE_COLS = 1)
-        var sx = Math.max(0, Math.min(Math.round((box.x - result.content.x) * scaleX), video.videoWidth - 1));
-        var sy = Math.max(0, Math.min(Math.round((box.y - result.content.y) * scaleY), video.videoHeight - 1));
-        var sw = Math.max(1, Math.min(Math.round(box.w * scaleX), video.videoWidth - sx));
-        var sh = Math.max(1, Math.min(Math.round(box.h * scaleY), video.videoHeight - sy));
-
+        // [EVALUASI-PILIHAN-C]: Tangkap foto utuh (Full Native Resolution) tanpa pembatasan kotak canvas browser
+        var sw = video.videoWidth;
+        var sh = video.videoHeight;
         var c = document.createElement('canvas');
         c.width = sw; c.height = sh;
-        c.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+        c.getContext('2d').drawImage(video, 0, 0, sw, sh, 0, 0, sw, sh);
         // Simpan canvas horizontal sebagai base rotate sisi aktif (reset derajat ke 0)
         if (checkScanStage === 1) {
             checkBaseFront = c;

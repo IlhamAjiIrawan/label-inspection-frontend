@@ -27,13 +27,18 @@
     // Satu-satunya sumber: Library FastAPI (tab "Milik Saya" dihapus sesuai request).
     var choosePanel, chooseSearch,
         chooseGrid, chooseLoading, chooseError, chooseEmpty,
-        choosePrev, chooseNext, choosePageInfo, chooseBackBtn;
+        choosePrev, chooseNext, choosePageInfo, chooseBackBtn,
+        chooseRefreshBtn, chooseRefreshIcon;
     var chooseTab = 'global'; // 'mine' (nonaktif, dipertahankan untuk kompatibilitas) | 'global'
     var choosePage = 1, chooseTotalPages = 1, chooseTotal = 0, chooseQ = '';
     var CHOOSE_PER_PAGE = 12;
     var chooseSearchTimer = null;
     var chooseAbort = null;
     var chooseBlobUrls = [];
+    var choosePollTimer = null;
+    var choosePollAttempts = 0;
+    var CHOOSE_POLL_MAX_ATTEMPTS = 25; // 25 attempts * 2.5s = ~60s
+    var CHOOSE_POLL_INTERVAL_MS = 2500;
     // Peta sisi FRONT/BACK dari data lokal (ground truth filename -front/-back).
     // fastapi_ref_id -> { side: 'front'|'back', sessionKey: basis stamp }. Best-effort.
     var chooseSideMap = {};
@@ -3468,7 +3473,40 @@
         try { return sessionStorage.getItem('label_inspection_token') || ''; } catch (e) { return ''; }
     }
 
+    function stopChoosePolling() {
+        if (choosePollTimer) {
+            clearTimeout(choosePollTimer);
+            choosePollTimer = null;
+        }
+        choosePollAttempts = 0;
+    }
+
+    function startChoosePolling() {
+        if (choosePollTimer) return;
+        if (choosePollAttempts >= CHOOSE_POLL_MAX_ATTEMPTS) {
+            return;
+        }
+        choosePollTimer = setTimeout(function () {
+            choosePollTimer = null;
+            choosePollAttempts++;
+            fetchChooseList(true, true);
+        }, CHOOSE_POLL_INTERVAL_MS);
+    }
+
+    function refreshChooseList() {
+        stopChoosePolling();
+        if (chooseRefreshIcon) chooseRefreshIcon.classList.add('animate-spin');
+        chooseSideMapPromise = null;
+        return Promise.resolve(fetchChooseList(false, true)).finally(function () {
+            if (chooseRefreshIcon) {
+                setTimeout(function () { chooseRefreshIcon.classList.remove('animate-spin'); }, 400);
+            }
+        });
+    }
+
     function hideChoosePanel() {
+        stopChoosePolling();
+        abortChooseFetch();
         if (choosePanel) choosePanel.classList.add('hidden');
     }
 
@@ -3488,12 +3526,13 @@
         if (scanStep) scanStep.classList.add('hidden');
         if (choosePanel) choosePanel.classList.remove('hidden');
         if (stepIndicator) stepIndicator.textContent = 'Pilih Reference';
+        stopChoosePolling();
         // Kick off peta sisi lokal paralel (best-effort) + daftar library; grouping menunggu keduanya.
         try {
             chooseSideMap = {};
             chooseSideMapPromise = fetchChooseSideMap(getChooseToken());
         } catch (e) { chooseSideMapPromise = null; }
-        fetchChooseList();
+        fetchChooseList(false, true);
     }
 
     function setChooseLoading(on) {
@@ -3554,32 +3593,39 @@
         return chooseSideMapPromise;
     }
 
-    function fetchChooseList() {
+    function fetchChooseList(silent, forceFresh) {
         abortChooseFetch();
-        revokeChooseBlobs();
+        if (!silent) {
+            revokeChooseBlobs();
+            setChooseLoading(true);
+            if (chooseGrid) chooseGrid.innerHTML = '';
+            if (chooseEmpty) chooseEmpty.classList.add('hidden');
+        }
         var token = getChooseToken();
-        if (!token) { showChooseError('Sesi telah berakhir. Silakan login kembali.'); return; }
+        if (!token) {
+            stopChoosePolling();
+            if (!silent) showChooseError('Sesi telah berakhir. Silakan login kembali.');
+            return Promise.reject(new Error('NO_TOKEN'));
+        }
 
-        setChooseLoading(true);
-        if (chooseGrid) chooseGrid.innerHTML = '';
-        if (chooseEmpty) chooseEmpty.classList.add('hidden');
-
-        var url = chooseTab === 'mine'
-            ? '/api/references?per_page=' + CHOOSE_PER_PAGE + '&page=' + choosePage + '&q=' + encodeURIComponent(chooseQ)
-            : '/api/references-library?per_page=' + CHOOSE_PER_PAGE + '&page=' + choosePage + '&q=' + encodeURIComponent(chooseQ);
+        var baseEndpoint = chooseTab === 'mine' ? '/api/references' : '/api/references-library';
+        var url = baseEndpoint + '?per_page=' + CHOOSE_PER_PAGE + '&page=' + choosePage + '&q=' + encodeURIComponent(chooseQ);
+        if (silent || forceFresh) {
+            url += '&fresh=1';
+        }
 
         try { chooseAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null; }
         catch (e) { chooseAbort = null; }
         var opts = { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } };
         if (chooseAbort && chooseAbort.signal) opts.signal = chooseAbort.signal;
 
-        fetch(url, opts).then(function (res) {
+        return fetch(url, opts).then(function (res) {
             if (res.status === 401) throw new Error('UNAUTHORIZED');
             if (!res.ok) throw new Error('HTTP ' + res.status);
             return res.json();
         }).then(function (json) {
             chooseAbort = null;
-            setChooseLoading(false);
+            if (!silent) setChooseLoading(false);
             if (!json.success && chooseTab === 'global') {
                 throw new Error(json.message || 'Library global tidak tersedia');
             }
@@ -3641,7 +3687,7 @@
             if (chooseTab === 'global') {
                 // 1 sesi = 1 card (FRONT atas + BACK bawah); tunggu peta sisi lokal (best-effort).
                 updateChoosePager();
-                if (!chooseSideMapPromise) {
+                if (!chooseSideMapPromise || forceFresh) {
                     try { chooseSideMapPromise = fetchChooseSideMap(token); } catch (e) { chooseSideMapPromise = null; }
                 }
                 Promise.resolve(chooseSideMapPromise).then(function () {
@@ -3655,15 +3701,18 @@
         }).catch(function (err) {
             if (err && err.name === 'AbortError') return;
             chooseAbort = null;
-            setChooseLoading(false);
+            if (!silent) setChooseLoading(false);
             updateChoosePager();
             if (err && err.message === 'UNAUTHORIZED') {
+                stopChoosePolling();
                 try { sessionStorage.removeItem('label_inspection_token'); } catch (e) {}
                 showChooseError('Sesi telah berakhir. Silakan login kembali.');
-            } else if (chooseTab === 'global') {
-                showChooseError((err && err.message) || 'Library tidak tersedia. Coba lagi.');
-            } else {
-                showChooseError((err && err.message) || 'Gagal memuat daftar. Coba lagi.');
+            } else if (!silent) {
+                if (chooseTab === 'global') {
+                    showChooseError((err && err.message) || 'Library tidak tersedia. Coba lagi.');
+                } else {
+                    showChooseError((err && err.message) || 'Gagal memuat daftar. Coba lagi.');
+                }
             }
         });
     }
@@ -3825,9 +3874,10 @@
     function renderChooseDualMine(groups) {
         if (!chooseGrid) return;
         chooseGrid.innerHTML = '';
-        if (!groups.length) { if (chooseEmpty) chooseEmpty.classList.remove('hidden'); return; }
+        if (!groups.length) { if (chooseEmpty) chooseEmpty.classList.remove('hidden'); stopChoosePolling(); return; }
         if (chooseEmpty) chooseEmpty.classList.add('hidden');
         var token = getChooseToken();
+        var anyPendingOnPage = false;
         groups.forEach(function (group) {
             if (group.single) {
                 var r = group.front;
@@ -3858,6 +3908,11 @@
                 if (delBtnDualSolo) delBtnDualSolo.addEventListener('click', function () {
                     openDeleteModal({ files: [{ label: 'File', name: r.filename || '-' }], urls: ['/api/references/' + encodeURIComponent(r.id)] });
                 });
+                if (singleCard.ocrStatus === 'pending') {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Menunggu OCR...</span>';
+                    anyPendingOnPage = true;
+                }
                 return;
             }
             var del = dualMineCardShell(group);
@@ -3910,9 +3965,14 @@
                 var s = mineOcrStatus(r);
                 return s !== 'success' && s !== 'failed';
             });
+            if (hasPendingMine) anyPendingOnPage = true;
             if (missingMine) { useBtn.disabled = true; useBtn.textContent = 'Menunggu pasangan'; useBtn.title = 'Belahan sesi belum lengkap'; }
             else if (hasFailedMine) { useBtn.disabled = true; useBtn.textContent = 'OCR Gagal'; useBtn.title = 'OCR gagal — buat scan baru untuk label ini'; }
-            else if (hasPendingMine) { useBtn.disabled = true; useBtn.textContent = 'Menunggu OCR...'; useBtn.title = 'OCR masih diproses'; }
+            else if (hasPendingMine) {
+                useBtn.disabled = true;
+                useBtn.innerHTML = '<span class="inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Menunggu OCR...</span>';
+                useBtn.title = 'OCR masih diproses';
+            }
             else {
                 useBtn.addEventListener('click', function () {
                     var dualToken = getChooseToken();
@@ -3956,6 +4016,11 @@
                 openDeleteModal({ files: files, urls: urls });
             });
         });
+        if (anyPendingOnPage) {
+            startChoosePolling();
+        } else {
+            stopChoosePolling();
+        }
     }
 
     function renderChooseGrid(cards) {
@@ -3963,10 +4028,12 @@
         chooseGrid.innerHTML = '';
         if (!cards.length) {
             if (chooseEmpty) chooseEmpty.classList.remove('hidden');
+            stopChoosePolling();
             return;
         }
         if (chooseEmpty) chooseEmpty.classList.add('hidden');
         var token = getChooseToken();
+        var anyPendingOnPage = false;
         cards.forEach(function (card) {
             var el = chooseCardShell(card);
             chooseGrid.appendChild(el);
@@ -3999,6 +4066,11 @@
                     btn.disabled = true;
                     btn.textContent = 'OCR Gagal';
                     btn.title = 'OCR gagal — buat scan baru untuk label ini';
+                } else if (card.ocrStatus === 'pending') {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Menunggu OCR...</span>';
+                    btn.title = 'OCR masih diproses di latar belakang';
+                    anyPendingOnPage = true;
                 }
             } else {
                 // Library Global: thumb public FastAPI, langsung <img> (tanpa auth/CORS issue)
@@ -4019,10 +4091,17 @@
                     btn.textContent = 'OCR Gagal';
                 } else if (card.ocrStatus === 'pending') {
                     btn.disabled = true;
-                    btn.textContent = 'Menunggu OCR...';
+                    btn.innerHTML = '<span class="inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Menunggu OCR...</span>';
+                    btn.title = 'OCR masih diproses di latar belakang';
+                    anyPendingOnPage = true;
                 }
             }
         });
+        if (anyPendingOnPage) {
+            startChoosePolling();
+        } else {
+            stopChoosePolling();
+        }
     }
 
     // 1 sesi = 1 card: blok FRONT di ATAS, blok BACK di BAWAH (tanpa teks hasil OCR).
@@ -4097,9 +4176,11 @@
         chooseGrid.innerHTML = '';
         if (!sessions.length) {
             if (chooseEmpty) chooseEmpty.classList.remove('hidden');
+            stopChoosePolling();
             return;
         }
         if (chooseEmpty) chooseEmpty.classList.add('hidden');
+        var anyPendingOnPage = false;
         sessions.forEach(function (sess) {
             // Single tak-berpasangan: card tunggal existing (tanpa excerpt) + wiring global existing.
             if (sess.single) {
@@ -4121,8 +4202,15 @@
                 if (delBtnSolo) delBtnSolo.addEventListener('click', function () {
                     openDeleteModal({ files: [{ label: 'File', name: card.refId || '-' }], urls: ['/api/references-library/' + encodeURIComponent(card.refId)] });
                 });
-                if (card.ocrStatus === 'failed') { btn.disabled = true; btn.textContent = 'OCR Gagal'; }
-                else if (card.ocrStatus === 'pending') { btn.disabled = true; btn.textContent = 'Menunggu OCR...'; }
+                if (card.ocrStatus === 'failed') {
+                    btn.disabled = true;
+                    btn.textContent = 'OCR Gagal';
+                } else if (card.ocrStatus === 'pending') {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Menunggu OCR...</span>';
+                    btn.title = 'OCR masih diproses di latar belakang';
+                    anyPendingOnPage = true;
+                }
                 return;
             }
             var del = globalSessionCardShell(sess);
@@ -4149,13 +4237,20 @@
                 var s = c.ocrStatus || '';
                 return s !== 'success' && s !== 'failed';
             });
+            if (hasPendingG) anyPendingOnPage = true;
+
             if (!missingG && !hasFailedG && !hasPendingG) {
                 useBtn.addEventListener('click', function () { useGlobalPair(gF1, gF2, gB1, gB2, useBtn); });
             } else {
                 useBtn.disabled = true;
-                if (missingG) useBtn.textContent = 'Menunggu pasangan';
-                else if (hasFailedG) useBtn.textContent = 'OCR Gagal';
-                else useBtn.textContent = 'Menunggu OCR...';
+                if (missingG) {
+                    useBtn.textContent = 'Menunggu pasangan';
+                } else if (hasFailedG) {
+                    useBtn.textContent = 'OCR Gagal';
+                } else {
+                    useBtn.innerHTML = '<span class="inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Menunggu OCR...</span>';
+                    useBtn.title = 'OCR masih diproses di latar belakang';
+                }
             }
             var delBtnSess = del.querySelector('.choose-delete-btn');
             if (delBtnSess) delBtnSess.addEventListener('click', function () {
@@ -4167,6 +4262,12 @@
                 openDeleteModal({ files: files, urls: urls });
             });
         });
+
+        if (anyPendingOnPage) {
+            startChoosePolling();
+        } else {
+            stopChoosePolling();
+        }
     }
 
     // Jalur B sesi: import FRONT 1+2 lalu BACK 1+2 berurutan (dedup server aman),
@@ -4512,6 +4613,8 @@
 
         choosePanel = document.getElementById('choose-panel');
         chooseSearch = document.getElementById('choose-search');
+        chooseRefreshBtn = document.getElementById('choose-refresh-btn');
+        chooseRefreshIcon = document.getElementById('choose-refresh-icon');
         chooseGrid = document.getElementById('choose-grid');
         chooseLoading = document.getElementById('choose-loading');
         chooseError = document.getElementById('choose-error');
@@ -4568,20 +4671,24 @@
         if (createNewBtn) createNewBtn.addEventListener('click', showTemplateStep);
         // Jalur B: Choose Label Reference — daftar + pakai tanpa scan ulang
         if (chooseBtn) chooseBtn.addEventListener('click', openChoosePanel);
+        if (chooseRefreshBtn) chooseRefreshBtn.addEventListener('click', refreshChooseList);
         if (backToMenuBtn) backToMenuBtn.addEventListener('click', showReferenceMenu);
         if (chooseBackBtn) chooseBackBtn.addEventListener('click', showReferenceMenu);
         if (chooseSearch) chooseSearch.addEventListener('input', function () {
+            stopChoosePolling();
             clearTimeout(chooseSearchTimer);
             chooseSearchTimer = setTimeout(function () {
                 chooseQ = chooseSearch.value.trim();
                 choosePage = 1;
-                fetchChooseList();
+                fetchChooseList(false, true);
             }, 400);
         });
         if (choosePrev) choosePrev.addEventListener('click', function () {
+            stopChoosePolling();
             if (choosePage > 1) { choosePage -= 1; fetchChooseList(); }
         });
         if (chooseNext) chooseNext.addEventListener('click', function () {
+            stopChoosePolling();
             if (choosePage < chooseTotalPages) { choosePage += 1; fetchChooseList(); }
         });
 

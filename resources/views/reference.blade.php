@@ -211,12 +211,13 @@
                     <svg class="w-4 h-4 text-sky-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
-                    <span id="template-info" class="font-medium">-</span>
+                    <span id="template-info" class="font-medium">Mode: Auto-Detect Label (Tanpa Batasan Ukuran)</span>
                 </p>
-                <button id="change-template-btn"
+                <button id="back-to-menu-from-scan" type="button"
                         class="px-4 py-2 rounded-xl border border-[#6C757D]/40 text-[#212529] text-sm font-semibold hover:bg-[#F8F9FA] transition">
-                    Change template
+                    &larr; Back to Menu
                 </button>
+                <button id="change-template-btn" class="hidden" type="button"></button>
             </div>
 
             <div id="dual-stepper" class="flex flex-wrap items-center gap-2 text-xs font-semibold">
@@ -227,11 +228,13 @@
                 <span id="dual-step-save" class="px-3 py-1.5 rounded-full border bg-[#E9ECEF] text-[#6C757D] border-[#6C757D]/30">Simpan 2 Label</span>
             </div>
 
-            <p id="dual-stage-info" role="status" aria-live="polite" class="bg-[#E9ECEF] border border-[#6C757D]/30 rounded-2xl px-4 py-3 text-sm text-[#212529]">Tahap 1/2 &mdash; Posisikan <span class="font-bold">SISI DEPAN (Front)</span> di dalam bingkai, lalu tekan <span class="font-bold">Capture Label</span>.</p>
+            <p id="dual-stage-info" role="status" aria-live="polite" class="bg-[#E9ECEF] border border-[#6C757D]/30 rounded-2xl px-4 py-3 text-sm text-[#212529]">Tahap 1/2 &mdash; Posisikan <span class="font-bold">SISI DEPAN (Front)</span> di area kamera, lalu tekan <span class="font-bold">Capture Label</span>.</p>
 
             <div class="bg-[#E9ECEF] border border-[#6C757D]/30 text-[#212529] rounded-2xl p-4 text-sm leading-relaxed">
-                <p class="font-semibold">How to scan (2 tahap)</p>
-                <p class="mt-1">1. Tap <strong>Start Scanning Label</strong> &rarr; pindai <strong>SISI DEPAN (Front)</strong> &rarr; <strong>Capture Label</strong> &middot; 2. Tekan <strong>Lanjut ke Capture 2</strong> &rarr; pindai <strong>SISI BELAKANG (Back)</strong> &rarr; <strong>Capture Label 2</strong> &middot; 3. Periksa 2 hasil &rarr; <strong>Simpan 2 Label</strong>.</p>
+                <p class="font-semibold">Cara Capture Otomatis (Opsi C):</p>
+                <p class="mt-1">1. Posisikan label <strong>SISI DEPAN (Front)</strong> &rarr; Tekan <strong>Capture Label</strong> &rarr; Sistem OpenCV mendeteksi &amp; meluruskan Label 1 dan Label 2 secara otomatis.<br/>
+                2. Tekan <strong>Lanjut ke Capture 2</strong> &rarr; Balik ke <strong>SISI BELAKANG (Back)</strong> &rarr; Tekan <strong>Capture Label 2</strong>.<br/>
+                3. Beri nama referensi &rarr; <strong>Simpan</strong>.</p>
             </div>
 
             <div class="bg-[#E9ECEF] rounded-2xl border border-[#6C757D]/30 shadow-sm p-6 md:p-8">
@@ -279,21 +282,22 @@
 
                     <div class="bg-[#212529] rounded-2xl overflow-hidden relative">
                         <video id="camera-preview" autoplay playsinline muted
-                               class="w-full h-auto max-h-[70vh] object-contain bg-[#212529]"></video>
+                                class="w-full h-auto max-h-[70vh] object-contain bg-[#212529]"></video>
                         <div class="absolute top-3 left-3 flex items-center gap-2 bg-[#212529]/70 rounded-full px-3 py-1.5">
                             <span class="w-2 h-2 rounded-full bg-sky-500 animate-pulse"></span>
                             <span class="text-white text-xs font-semibold tracking-wide">LIVE</span>
                         </div>
 
+                        {{-- Canvas overlay panduan dinonaktifkan untuk evaluasi Pilihan C (Free Placement Auto-Detect) --}}
                         <canvas id="guide-overlay" aria-hidden="true"
-                                class="pointer-events-none absolute inset-0 w-full h-full"></canvas>
+                                class="hidden pointer-events-none absolute inset-0 w-full h-full"></canvas>
 
                         <span id="guide-size-badge"
-                              class="absolute top-3 right-3 bg-[#212529]/70 rounded-full px-3 py-1.5 text-white text-xs font-semibold tracking-wide">
+                              class="hidden absolute top-3 right-3 bg-[#212529]/70 rounded-full px-3 py-1.5 text-white text-xs font-semibold tracking-wide">
                         </span>
 
                         <span id="dual-side-badge"
-                              class="absolute top-12 right-3 bg-[#0284C7] rounded-full px-3 py-1.5 text-white text-xs font-bold tracking-wide">
+                              class="absolute top-3 right-3 bg-[#0284C7] rounded-full px-3 py-1.5 text-white text-xs font-bold tracking-wide">
                             FRONT
                         </span>
 
@@ -301,15 +305,20 @@
                              class="pointer-events-none absolute inset-0 bg-white opacity-0 transition-opacity duration-150"></div>
                     </div>
 
-                    <div class="mt-4 flex items-center gap-3">
+                    {{-- Slider panduan manual disembunyikan untuk Pilihan C --}}
+                    <div class="hidden mt-4 items-center gap-3">
                         <label for="guide-size-range" class="text-sm font-medium text-[#212529] whitespace-nowrap">Frame size</label>
                         <input id="guide-size-range" type="range" min="20" max="100" step="1" value="100"
                                class="flex-1 sm:flex-none sm:w-56 accent-sky-600 cursor-pointer" />
                         <span id="guide-size-value" class="text-xs font-semibold text-[#6C757D] w-10">100%</span>
                     </div>
-                    <p class="mt-1 text-xs text-[#6C757D]">
-                        Adjust the horizontal frame and align it with a real ruler or object so the cm values match the physical label (frame fits both sides side by side). Set BEFORE Capture — Retake to adjust again.
-                    </p>
+
+                    <div class="mt-3 p-3 rounded-xl bg-sky-50 border border-sky-200 flex items-center gap-2.5">
+                        <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-sky-600 text-white text-xs font-bold shrink-0">✓</span>
+                        <div class="text-xs text-sky-900 leading-relaxed">
+                            <strong class="font-semibold">Mode Snap &amp; Auto-Detect (Pilihan C):</strong> Tidak perlu memilih ukuran atau mengepaskan kotak manual. Posisikan label pakaian di area kamera, lalu tekan <strong>Capture Label</strong>. Sistem OpenCV akan mendeteksi dan memotong Label 1 &amp; Label 2 secara otomatis.
+                        </div>
+                    </div>
 
                     <div class="mt-4 flex items-center justify-between flex-wrap gap-3">
                         <p id="camera-label" class="text-sm text-[#6C757D]">-</p>

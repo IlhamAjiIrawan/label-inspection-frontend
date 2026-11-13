@@ -87,7 +87,7 @@ class ReferenceController extends Controller
     {
         $validated = $request->validate([
             'image'                     => 'required|image|max:5120',
-            'template_id'               => 'required|string|in:S,M,L,XL,TL',
+            'template_id'               => 'required|string|max:4',
             'template_name'             => 'required|string|max:50',
             // Nama custom dari popup refname-modal (STAGE-B fungsional).
             // Selaras kontrak FastAPI ref_library.name 3..80. Nullable agar
@@ -344,7 +344,7 @@ class ReferenceController extends Controller
     public function storeBatch(Request $request)
     {
         $validated = $request->validate([
-            'template_id'     => 'required|string|in:S,M,L,XL,TL',
+            'template_id'     => 'required|string|max:4',
             'template_name'   => 'required|string|max:50',
             // Nama custom popup 1 sesi front+back (selaras FastAPI 3..80).
             'name'            => 'nullable|string|min:3|max:80',
@@ -1083,6 +1083,29 @@ class ReferenceController extends Controller
     }
 
     /**
+     * POST /api/references/detect-regions
+     * Proxy untuk deteksi region label otomatis (Pilihan C).
+     */
+    public function detectRegions(Request $request)
+    {
+        $request->validate([
+            'image' => 'required|file|image|max:10240', // max 10MB
+        ]);
+
+        $lib = new FastApiReferenceLibrary();
+        $result = $lib->detectRegions($request->file('image'));
+
+        if (!$result) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mendeteksi region label pada gambar. Silakan coba lagi atau posisikan kamera lebih dekat.',
+            ], 500);
+        }
+
+        return response()->json($result);
+    }
+
+    /**
      * Import 1 item Library Global menjadi reference lokal (Jalur B "Gunakan").
      * POST /api/references/import {fastapi_ref_id, template_id, template_name, template_width, template_height}
      *
@@ -1094,7 +1117,7 @@ class ReferenceController extends Controller
     {
         $validated = $request->validate([
             'fastapi_ref_id'  => 'required|string|max:64|regex:/^ref-[A-Za-z0-9\-_]+$/',
-            'template_id'     => 'required|string|in:S,M,L,XL,TL',
+            'template_id'     => 'required|string|max:4',
             'template_name'   => 'required|string|max:50',
             'template_width'  => 'required|integer|min:1',
             'template_height' => 'required|integer|min:1',

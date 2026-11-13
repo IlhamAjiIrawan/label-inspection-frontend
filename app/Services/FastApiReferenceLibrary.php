@@ -374,4 +374,56 @@ class FastApiReferenceLibrary
             return null;
         }
     }
+
+    /**
+     * Kirim gambar utuh untuk auto-detect label (Pilihan C).
+     *
+     * @param  \Illuminate\Http\UploadedFile|string  $file
+     * @return array|null
+     */
+    public function detectRegions($file): ?array
+    {
+        try {
+            if ($file instanceof \Illuminate\Http\UploadedFile) {
+                $contents = file_get_contents($file->getRealPath());
+                $filename = $file->getClientOriginalName();
+            } elseif (is_string($file) && is_file($file)) {
+                $contents = file_get_contents($file);
+                $filename = basename($file);
+            } else {
+                return null;
+            }
+
+            if (!$contents) {
+                return null;
+            }
+
+            $response = $this->client->post($this->baseUrl . '/detect-regions', [
+                'headers'   => $this->getHeaders(),
+                'multipart' => [
+                    [
+                        'name'     => 'image',
+                        'contents' => $contents,
+                        'filename' => $filename,
+                    ],
+                ],
+            ]);
+
+            $httpCode = $response->getStatusCode();
+            $body = json_decode($response->getBody()->getContents(), true);
+
+            if ($httpCode === 200 && is_array($body) && ($body['success'] ?? false)) {
+                return $body;
+            }
+
+            Log::warning('[REF-LIB] detectRegions non-200', [
+                'http_code' => $httpCode,
+                'response'  => $body,
+            ]);
+            return null;
+        } catch (\Exception $e) {
+            Log::warning('[REF-LIB] detectRegions exception', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
 }

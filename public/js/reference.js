@@ -397,25 +397,7 @@
     }
 
     function goToSelectStep() {
-        try { window.__refGoCheck = null; } catch (e) {}
-        if (activeOcrAbort) { try { activeOcrAbort.abort(); } catch (e) {} activeOcrAbort = null; }
-        activeOcrFilename = null;
-        stopCamera();
-        pendingOcrData = null;
-        isOcrProcessing = false;
-        clearOcrPolling();
-        hideOcrPanel();
-        if (ocrPanel) ocrPanel.removeAttribute('data-filename');
-        discardLastCapture();
-        if (resultCard) resultCard.classList.add('hidden');
-        if (scanHeader) scanHeader.classList.remove('hidden');
-        if (scanStep) scanStep.classList.add('hidden');
-        if (menuStep) menuStep.classList.add('hidden');
-        if (templateStep) templateStep.classList.remove('hidden');
-        if (stepIndicator) stepIndicator.textContent = 'Step 1 of 2';
-        if (saveCaptureBtn) saveCaptureBtn.disabled = true;
-        if (saveBtnText) saveBtnText.textContent = 'Simpan Reference';
-        try { if (typeof dualResetAll === 'function') dualResetAll(); } catch (e) {}
+        showReferenceMenu();
     }
 
     function showReferenceMenu() {
@@ -430,36 +412,39 @@
     }
 
     function showTemplateStep() {
+        goToScanStep();
+    }
+
+    function backToMenuFromScan() {
         if (typeof stopCamera === 'function') { try { stopCamera(); } catch (e) {} }
         abortChooseFetch();
-        if (menuStep) menuStep.classList.add('hidden');
         if (scanStep) scanStep.classList.add('hidden');
+        if (templateStep) templateStep.classList.add('hidden');
         if (typeof hideChoosePanel === 'function') hideChoosePanel();
-        if (templateStep) templateStep.classList.remove('hidden');
-        if (stepIndicator) stepIndicator.textContent = 'Step 1 of 2';
+        if (menuStep) menuStep.classList.remove('hidden');
+        if (stepIndicator) stepIndicator.textContent = 'Start';
         try { if (typeof dualResetAll === 'function') dualResetAll(); } catch (e) {}
     }
 
     function goToScanStep() {
-        if (!selectedTemplate) return;
+        if (!selectedTemplate) {
+            selectedTemplate = { id: 'AUTO', name: 'Auto-Detected', width: 35, height: 90 };
+        }
 
         persistSelection();
         if (templateInfoEl) {
-            var infoDims = guideEffectiveDims();
-            var infoW = infoDims ? infoDims.mmW : selectedTemplate.width;
-            var infoH = infoDims ? infoDims.mmH : selectedTemplate.height;
-            templateInfoEl.textContent = 'Template: ' + selectedTemplate.id + ' \u2014 ' + selectedTemplate.name +
-                ' \u00b7 ' + infoW + ' \u00d7 ' + infoH + ' mm';
+            templateInfoEl.textContent = 'Mode: Auto-Detect Label (Opsi C)';
         }
         updateGuideBadge();
         if (menuStep) menuStep.classList.add('hidden');
         if (templateStep) templateStep.classList.add('hidden');
         if (typeof hideChoosePanel === 'function') hideChoosePanel();
         if (scanStep) scanStep.classList.remove('hidden');
-        if (stepIndicator) stepIndicator.textContent = 'Step 2 of 2';
+        if (stepIndicator) stepIndicator.textContent = 'Live Scan';
         try { if (typeof dualResetAll === 'function') dualResetAll(); } catch (e) {}
         try { if (typeof dualApplyStageToCamera === 'function') dualApplyStageToCamera(); } catch (e) {}
         if (scanHeader) scanHeader.classList.remove('hidden');
+        try { startCamera(); } catch (e) {}
     }
 
     // ===== Guide overlay =====
@@ -550,74 +535,17 @@
     }
 
     function drawGuide() {
-        if (!guideCtx || !guideRange || !selectedTemplate || !activeStream || !videoEl.videoWidth) return;
-
-        var dpr = Math.min(window.devicePixelRatio || 1, 2);
-        var cw = videoEl.clientWidth, ch = videoEl.clientHeight;
-        var bw = Math.round(cw * dpr), bh = Math.round(ch * dpr);
-        if (guideCanvas.width !== bw || guideCanvas.height !== bh) {
-            guideCanvas.width = bw;
-            guideCanvas.height = bh;
+        if (!guideCtx || !guideCanvas) return;
+        var cw = videoEl ? videoEl.clientWidth : (guideCanvas.width || 0);
+        var ch = videoEl ? videoEl.clientHeight : (guideCanvas.height || 0);
+        if (cw && ch) {
+            guideCtx.clearRect(0, 0, cw, ch);
         }
-        guideCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        guideCtx.clearRect(0, 0, cw, ch);
-
-        var content = getContentRect();
-        if (!content) return;
-        var g = getGuideBox(content);
-        if (!g) return;
-
-        guideCtx.fillStyle = 'rgba(0,0,0,0.35)';
-        guideCtx.fillRect(content.x, content.y, content.w, Math.max(0, g.y - content.y));
-        guideCtx.fillRect(content.x, g.y + g.h, content.w,
-            Math.max(0, content.y + content.h - (g.y + g.h)));
-        guideCtx.fillRect(content.x, g.y, Math.max(0, g.x - content.x), g.h);
-        guideCtx.fillRect(g.x + g.w, g.y,
-            Math.max(0, content.x + content.w - (g.x + g.w)), g.h);
-
-        guideCtx.strokeStyle = '#38BDF8';
-        guideCtx.lineWidth = 2;
-        guideCtx.strokeRect(g.x, g.y, g.w, g.h);
-
-        var cl = Math.min(Math.min(g.w, g.h) * 0.18, 28);
-        guideCtx.lineWidth = 3;
-        guideCtx.lineCap = 'round';
-        guideCtx.beginPath();
-        guideCtx.moveTo(g.x, g.y + cl);
-        guideCtx.lineTo(g.x, g.y);
-        guideCtx.lineTo(g.x + cl, g.y);
-        guideCtx.moveTo(g.x + g.w - cl, g.y);
-        guideCtx.lineTo(g.x + g.w, g.y);
-        guideCtx.lineTo(g.x + g.w, g.y + cl);
-        guideCtx.moveTo(g.x + g.w, g.y + g.h - cl);
-        guideCtx.lineTo(g.x + g.w, g.y + g.h);
-        guideCtx.lineTo(g.x + g.w - cl, g.y + g.h);
-        guideCtx.moveTo(g.x + cl, g.y + g.h);
-        guideCtx.lineTo(g.x, g.y + g.h);
-        guideCtx.lineTo(g.x, g.y + g.h - cl);
-        guideCtx.stroke();
-
-        guideCtx.strokeStyle = 'rgba(255,255,255,0.55)';
-        guideCtx.lineWidth = 1;
-        guideCtx.setLineDash([6, 6]);
-        guideCtx.beginPath();
-        guideCtx.moveTo(g.x + g.w / 2, g.y);
-        guideCtx.lineTo(g.x + g.w / 2, g.y + g.h);
-        guideCtx.moveTo(g.x, g.y + g.h / 2);
-        guideCtx.lineTo(g.x + g.w, g.y + g.h / 2);
-        guideCtx.stroke();
-        guideCtx.setLineDash([]);
-
-        drawLabelPill(guideCtx, g.cmW + ' cm', g.x + g.w / 2, g.y - 14);
-        drawLabelPill(guideCtx, g.cmH + ' cm', Math.min(g.x + g.w + 26, cw - 26), g.y + g.h / 2);
     }
 
     function updateGuideBadge() {
-        if (!guideBadge || !selectedTemplate) return;
-        var dims = guideEffectiveDims();
-        if (!dims) return;
-        guideBadge.textContent = selectedTemplate.id + ' · ' + dims.cmW + ' × ' + dims.cmH + ' cm';
-        // contoh horizontal 2x: "TL · 16 × 3.5 cm" | "M · 16 × 4 cm" | "S · 12 × 3 cm"
+        if (!guideBadge) return;
+        guideBadge.textContent = 'Auto-Detect';
     }
 
     function onGuideResize() {
@@ -632,7 +560,7 @@
         function p(n) { return (n < 10 ? '0' : '') + n; }
         var stamp = '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) +
             '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
-        return 'label-ref-' + selectedTemplate.id.toLowerCase() + '-' + stamp + '.png';
+        return 'label-ref-' + (selectedTemplate ? selectedTemplate.id.toLowerCase() : 'auto') + '-' + stamp + '.png';
     }
 
     function showCaptureFeedback(message, isError) {
@@ -2314,151 +2242,85 @@
         }, 'image/png');
     }
 
-    // Simpan sisi = auto-crop jadi Label 1+2 dari gambar final, lalu OCR SEQUENTIAL 1 lalu 2.
+    // Simpan sisi = kirim citra final (sesuai rotasi) ke detect-regions (OpenCV), lalu OCR sequential 1 lalu 2.
     function dualProcessSide(side) {
         var cap = side === 'front' ? lastCaptureFront : lastCaptureBack;
         var base = dualGetBase(side);
         if (!cap || !base) {
-            if (side === 'front') dualShowMiniFeedback('Capture dulu sebelum OCR.', true);
-            else dualShowBackMiniFeedback('Capture dulu sebelum OCR.', true);
+            if (side === 'front') dualShowMiniFeedback('Capture dulu sebelum proses.', true);
+            else dualShowBackMiniFeedback('Capture dulu sebelum proses.', true);
             return;
         }
         if (dualGetBusy(side)) return;
         dualSetBusy(side, true);
         dualSetRotateUI(side, false);
         dualSetProcessUI(side, false);
-        splitSetTripleVisible(side, true);
-        refreshSplitView(side);
-        [1, 2].forEach(function (idx) {
-            var els = splitPanelEls(side, idx);
-            if (els.mini.ocr) els.mini.ocr.textContent = 'Memotong otomatis...';
-            if (els.res.text) els.res.text.textContent = 'Memotong otomatis...';
-            dualSetSplitBadge(els.mini.badge, 'processing', 'Label ' + idx + ' · split');
-            dualSetSplitBadge(els.res.badge, 'processing', 'Label ' + idx + ' · split');
-        });
+
         if (side === 'front') {
-            dualShowMiniFeedback('Memotong otomatis jadi Label 1 + Label 2...', false);
+            dualShowMiniFeedback('Mendeteksi label & meluruskan otomatis (OpenCV)...', false);
             dualSetStageInfo('front-ocr');
         } else {
-            dualShowBackMiniFeedback('Memotong otomatis jadi Label 1 + Label 2...', false);
+            dualShowBackMiniFeedback('Mendeteksi label & meluruskan otomatis (OpenCV)...', false);
             dualSetStageInfo('back-ocr');
         }
+
         var deg = dualGetDeg(side);
         var finalCanvas = renderBaseAtDeg(base, deg);
         if (!finalCanvas) {
             dualSetBusy(side, false);
             dualSetRotateUI(side, true);
             dualSetProcessUI(side, true);
-            splitSetTripleVisible(side, false);
-            if (side === 'front') dualShowMiniFeedback('Split gagal. Coba Simpan ulang.', true);
-            else dualShowBackMiniFeedback('Split gagal. Coba Simpan ulang.', true);
+            if (side === 'front') dualShowMiniFeedback('Proses gagal. Coba lagi.', true);
+            else dualShowBackMiniFeedback('Proses gagal. Coba lagi.', true);
             return;
         }
-        var parts = splitLongSide(finalCanvas);
-        if (!parts) {
-            dualSetBusy(side, false);
-            dualSetRotateUI(side, true);
-            dualSetProcessUI(side, true);
-            splitSetTripleVisible(side, false);
-            if (side === 'front') dualShowMiniFeedback('Split gagal. Coba Simpan ulang.', true);
-            else dualShowBackMiniFeedback('Split gagal. Coba Simpan ulang.', true);
-            return;
-        }
-        var verticalSplit = !parts.horizontal;
-        var parentW = finalCanvas.width, parentH = finalCanvas.height;
-        var blobs = [null, null];
-        var pending = 2;
-        var failed = false;
-        function finishSplit() {
-            if (failed) return;
-            if (pending > 0) return;
-            if (!blobs[0] || !blobs[1]) {
-                failed = true;
+
+        finalCanvas.toBlob(function (blob) {
+            if (!blob) {
                 dualSetBusy(side, false);
                 dualSetRotateUI(side, true);
                 dualSetProcessUI(side, true);
-                if (side === 'front') dualShowMiniFeedback('Split gagal (encode). Coba Simpan ulang.', true);
-                else dualShowBackMiniFeedback('Split gagal (encode). Coba Simpan ulang.', true);
+                if (side === 'front') dualShowMiniFeedback('Gagal mengolah gambar.', true);
+                else dualShowBackMiniFeedback('Gagal mengolah gambar.', true);
                 return;
             }
-            var now = new Date();
-            var pcmW = cap.widthCm, pcmH = cap.heightCm;
-            var defs = [
-                { canvas: parts.c1, blob: blobs[0] },
-                { canvas: parts.c2, blob: blobs[1] }
-            ];
-            defs.forEach(function (d, i) {
-                var idx = i + 1;
-                var cw = d.canvas.width, ch = d.canvas.height;
-                var cmW = pcmW, cmH = pcmH;
-                if (!verticalSplit) { cmW = pcmW * (cw / parentW); cmH = pcmH; }
-                else { cmW = pcmW; cmH = pcmH * (ch / parentH); }
-                var old = splitGetCap(side, idx);
-                if (old && old.url) { try { URL.revokeObjectURL(old.url); } catch (e) {} }
-                splitSetCap(side, idx, {
-                    blob: d.blob,
-                    url: URL.createObjectURL(d.blob),
-                    filename: dualBuildSplitFilename(side, idx),
-                    templateId: cap.templateId,
-                    templateName: cap.templateName,
-                    widthCm: Math.round(cmW * 100) / 100,
-                    heightCm: Math.round(cmH * 100) / 100,
-                    widthPx: cw,
-                    heightPx: ch,
-                    filesize: d.blob.size,
-                    capturedAt: now
-                });
-                splitSetOcr(side, idx, null);
-                splitSetDone(side, idx, false);
-            });
-            // Hasil crop tampil: sembunyikan section adjust (rotate + bantuan + OCR tunggal).
-            // Tombol aksi sudah di bawah kartu; rotate dibuka lagi bila user memutar ulang.
-            splitSetAdjustVisible(side, false);
-            var reviewImg = side === 'front' ? frontReviewImgEl : backReviewImgEl;
-            if (reviewImg && cap.url) reviewImg.src = cap.url;
-            var els1 = splitPanelEls(side, 1), els2 = splitPanelEls(side, 2);
-            var c1 = splitGetCap(side, 1), c2 = splitGetCap(side, 2);
-            if (c1) {
-                if (els1.mini.img) els1.mini.img.src = c1.url;
-                if (els1.res.img) els1.res.img.src = c1.url;
-                if (els1.mini.meta && selectedTemplate) els1.mini.meta.textContent = selectedTemplate.id + ' - ' + selectedTemplate.name + ' - ' + c1.widthCm + ' x ' + c1.heightCm + ' cm - ' + c1.filename;
-            }
-            if (c2) {
-                if (els2.mini.img) els2.mini.img.src = c2.url;
-                if (els2.res.img) els2.res.img.src = c2.url;
-                if (els2.mini.meta && selectedTemplate) els2.mini.meta.textContent = selectedTemplate.id + ' - ' + selectedTemplate.name + ' - ' + c2.widthCm + ' x ' + c2.heightCm + ' cm - ' + c2.filename;
-            }
-            // OCR sequential: Label 1 tuntas baru Label 2.
-            if (side === 'front') dualShowMiniFeedback('Crop OK — OCR Label 1...', false);
-            else dualShowBackMiniFeedback('Crop OK — OCR Label 1...', false);
-            sendSplitOcr(side, 1, function () {
-                var still1 = splitGetCap(side, 1);
-                if (!still1) { dualSetBusy(side, false); dualSetRotateUI(side, true); dualSetProcessUI(side, true); return; }
-                if (side === 'front') dualShowMiniFeedback('Label 1 selesai — OCR Label 2...', false);
-                else dualShowBackMiniFeedback('Label 1 selesai — OCR Label 2...', false);
-                sendSplitOcr(side, 2, function () {
+
+            var fd = new FormData();
+            fd.append('image', blob, 'process-' + side + '.png');
+            var token = '';
+            try { token = sessionStorage.getItem('label_inspection_token'); } catch (e) {}
+            var headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+
+            fetch('/api/references/detect-regions', {
+                method: 'POST',
+                headers: headers,
+                body: fd
+            })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (data) {
+                if (!data || !data.success || !data.slots || data.slots.length < 2) {
+                    var msg = (data && data.message) ? data.message : 'Gagal mendeteksi label.';
+                    if (side === 'front') dualShowMiniFeedback(msg + ' Coba atur rotasi atau retake.', true);
+                    else dualShowBackMiniFeedback(msg + ' Coba atur rotasi atau retake.', true);
                     dualSetBusy(side, false);
                     dualSetRotateUI(side, true);
-                    // Proses dibuka lagi untuk koreksi ulang; Lanjut/Simpan via save-state.
                     dualSetProcessUI(side, true);
-                    dualUpdateSaveState();
-                });
+                    return;
+                }
+                applyDetectedSlots(side, blob, data);
+            })
+            .catch(function (err) {
+                console.error('[AUTO-DETECT] Deteksi gagal:', err);
+                if (side === 'front') dualShowMiniFeedback('Gagal deteksi otomatis. Periksa koneksi backend.', true);
+                else dualShowBackMiniFeedback('Gagal deteksi otomatis. Periksa koneksi backend.', true);
+                dualSetBusy(side, false);
+                dualSetRotateUI(side, true);
+                dualSetProcessUI(side, true);
             });
-        }
-        [parts.c1, parts.c2].forEach(function (c, i) {
-            try {
-                c.toBlob(function (blob) {
-                    if (!blob) { failed = true; }
-                    else blobs[i] = blob;
-                    pending -= 1;
-                    finishSplit();
-                }, 'image/png');
-            } catch (e) {
-                failed = true;
-                pending -= 1;
-                finishSplit();
-            }
-        });
+        }, 'image/png');
     }
 
     function dualPill(el, mode) {
@@ -2639,8 +2501,29 @@
         dualSetStepper();
     }
 
+    function dataUrlToBlob(dataUrl) {
+        if (!dataUrl) return null;
+        try {
+            var parts = dataUrl.split(',');
+            var mime = (parts[0].match(/:(.*?);/) || ['', 'image/png'])[1];
+            var bstr = atob(parts[1]);
+            var n = bstr.length;
+            var u8arr = new Uint8Array(n);
+            while (n--) {
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            return new Blob([u8arr], { type: mime });
+        } catch (e) {
+            console.error('[AUTO-DETECT] dataUrlToBlob error:', e);
+            return null;
+        }
+    }
+
     function dualOnCaptureClick() {
-        if (!activeStream || !selectedTemplate || !videoEl || !videoEl.videoWidth || videoEl.readyState < 2) {
+        if (!selectedTemplate) {
+            selectedTemplate = { id: 'AUTO', name: 'Auto-Detected', width: 35, height: 90 };
+        }
+        if (!activeStream || !videoEl || !videoEl.videoWidth || videoEl.readyState < 2) {
             showCaptureFeedback('Camera is not ready yet.', true);
             return;
         }
@@ -2654,67 +2537,225 @@
         }
     }
 
-    function dualCaptureForSide(side) {
-        // FIX-GUIDE-SLIDER: paksa sinkron DOM→persist tepat sebelum crop (fresh, bukan cache)
-        try {
-            if (typeof guideRange !== 'undefined' && guideRange) {
-                var _cs = parseInt(guideRange.value, 10);
-                if (_cs >= GUIDE_MIN_SIZE && _cs <= GUIDE_MAX_SIZE) persistGuideSize(_cs);
+    function applyDetectedSlots(side, fullBlob, data) {
+        if (!data || !data.slots || data.slots.length < 2) {
+            if (captureBtn) captureBtn.disabled = false;
+            showCaptureFeedback('Gagal mendeteksi 2 label. Silakan coba lagi.', true);
+            return;
+        }
+
+        var slot1 = data.slots[0];
+        var slot2 = data.slots[1];
+        var blob1 = dataUrlToBlob(slot1.crop_data_url);
+        var blob2 = dataUrlToBlob(slot2.crop_data_url);
+
+        if (!blob1 || !blob2) {
+            if (captureBtn) captureBtn.disabled = false;
+            showCaptureFeedback('Gagal memproses potongan gambar.', true);
+            return;
+        }
+
+        dualEnsureBaseStamp();
+        var now = new Date();
+        var tId = (selectedTemplate && selectedTemplate.id) || 'AUTO';
+        var tName = (selectedTemplate && selectedTemplate.name) || 'Auto-Detected';
+
+        var cap = {
+            blob: fullBlob,
+            url: URL.createObjectURL(fullBlob),
+            filename: dualBuildFilename(side),
+            templateId: tId,
+            templateName: tName,
+            widthCm: 3.5,
+            heightCm: 9.0,
+            widthPx: data.image_width || (videoEl ? videoEl.videoWidth : 1280),
+            heightPx: data.image_height || (videoEl ? videoEl.videoHeight : 720),
+            filesize: fullBlob.size,
+            capturedAt: now
+        };
+
+        var cap1 = {
+            blob: blob1,
+            url: URL.createObjectURL(blob1),
+            filename: dualBuildSplitFilename(side, 1),
+            templateId: tId,
+            templateName: tName,
+            widthCm: 3.5,
+            heightCm: 9.0,
+            widthPx: slot1.w,
+            heightPx: slot1.h,
+            filesize: blob1.size,
+            capturedAt: now
+        };
+
+        var cap2 = {
+            blob: blob2,
+            url: URL.createObjectURL(blob2),
+            filename: dualBuildSplitFilename(side, 2),
+            templateId: tId,
+            templateName: tName,
+            widthCm: 3.5,
+            heightCm: 9.0,
+            widthPx: slot2.w,
+            heightPx: slot2.h,
+            filesize: blob2.size,
+            capturedAt: now
+        };
+
+        splitSetCap(side, 1, cap1);
+        splitSetCap(side, 2, cap2);
+        splitSetOcr(side, 1, null);
+        splitSetOcr(side, 2, null);
+        splitSetDone(side, 1, false);
+        splitSetDone(side, 2, false);
+
+        if (side === 'front') {
+            dualRevokeSide('front');
+            lastCaptureFront = cap;
+            pendingOcrFront = null;
+            dualFrontDone = false;
+            dualSetBadge(dualFrontBadgeEl, 'idle', 'idle');
+            if (dualFrontThumbEl) dualFrontThumbEl.src = cap.url;
+            dualUpdateFrontMini();
+            try { stopCamera(); } catch (e) {}
+
+            splitSetAdjustVisible('front', false);
+            splitSetTripleVisible('front', true);
+
+            if (frontReviewImgEl) {
+                frontReviewImgEl.src = data.annotated_preview || cap.url;
             }
-        } catch (e) {}
-        var content = getContentRect();
-        var g = content ? getGuideBox(content) : null;
-        if (!content || !g) { if (captureBtn) captureBtn.disabled = false; return; }
-        var scaleX = videoEl.videoWidth / content.w;
-        var scaleY = videoEl.videoHeight / content.h;
-        var sx = Math.max(0, Math.min(Math.round((g.x - content.x) * scaleX), videoEl.videoWidth - 1));
-        var sy = Math.max(0, Math.min(Math.round((g.y - content.y) * scaleY), videoEl.videoHeight - 1));
-        var sw = Math.max(1, Math.min(Math.round(g.w * scaleX), videoEl.videoWidth - sx));
-        var sh = Math.max(1, Math.min(Math.round(g.h * scaleY), videoEl.videoHeight - sy));
+
+            var els1 = splitPanelEls('front', 1), els2 = splitPanelEls('front', 2);
+            if (els1.mini.img) els1.mini.img.src = cap1.url;
+            if (els1.res.img) els1.res.img.src = cap1.url;
+            if (els1.mini.meta) els1.mini.meta.textContent = 'Label 1 · ' + slot1.w + ' × ' + slot1.h + ' px' + (slot1.is_fallback ? ' (Auto)' : ' (OpenCV)');
+
+            if (els2.mini.img) els2.mini.img.src = cap2.url;
+            if (els2.res.img) els2.res.img.src = cap2.url;
+            if (els2.mini.meta) els2.mini.meta.textContent = 'Label 2 · ' + slot2.w + ' × ' + slot2.h + ' px' + (slot2.is_fallback ? ' (Auto)' : ' (OpenCV)');
+
+            dualSetStageInfo('front');
+            dualShowMiniFeedback('Label terdeteksi! Memproses OCR Label 1...', false);
+            if (dualNextToBackEl) dualNextToBackEl.disabled = true;
+
+            if (dualResultCardEl) dualResultCardEl.classList.add('hidden');
+            try { dualHideBackLoading(); } catch (e) {}
+            dualHideBackMini();
+        } else {
+            dualRevokeSide('back');
+            lastCaptureBack = cap;
+            pendingOcrBack = null;
+            dualBackDone = false;
+            dualSetBadge(dualBackBadgeEl, 'idle', 'idle');
+            try { stopCamera(); } catch (e) {}
+
+            splitSetAdjustVisible('back', false);
+            splitSetTripleVisible('back', true);
+
+            if (backReviewImgEl) {
+                backReviewImgEl.src = data.annotated_preview || cap.url;
+            }
+
+            var bEls1 = splitPanelEls('back', 1), bEls2 = splitPanelEls('back', 2);
+            if (bEls1.mini.img) bEls1.mini.img.src = cap1.url;
+            if (bEls1.res.img) bEls1.res.img.src = cap1.url;
+            if (bEls1.mini.meta) bEls1.mini.meta.textContent = 'Label 1 · ' + slot1.w + ' × ' + slot1.h + ' px' + (slot1.is_fallback ? ' (Auto)' : ' (OpenCV)');
+
+            if (bEls2.mini.img) bEls2.mini.img.src = cap2.url;
+            if (bEls2.res.img) bEls2.res.img.src = cap2.url;
+            if (bEls2.mini.meta) bEls2.mini.meta.textContent = 'Label 2 · ' + slot2.w + ' × ' + slot2.h + ' px' + (slot2.is_fallback ? ' (Auto)' : ' (OpenCV)');
+
+            dualSetStageInfo('back');
+            dualShowBackMini(cap);
+            dualShowBackMiniFeedback('Label terdeteksi! Memproses OCR Label 1...', false);
+        }
+
+        // Jalankan OCR sequential: Label 1 dulu, lalu Label 2
+        sendSplitOcr(side, 1, function () {
+            var still1 = splitGetCap(side, 1);
+            if (!still1) {
+                if (captureBtn) captureBtn.disabled = false;
+                return;
+            }
+            if (side === 'front') dualShowMiniFeedback('Label 1 selesai — OCR Label 2...', false);
+            else dualShowBackMiniFeedback('Label 1 selesai — OCR Label 2...', false);
+
+            sendSplitOcr(side, 2, function () {
+                if (captureBtn) captureBtn.disabled = false;
+                if (side === 'front') {
+                    dualShowMiniFeedback('FRONT selesai! Tekan "Lanjut ke Capture 2 (Back)".', false);
+                    if (dualNextToBackEl) dualNextToBackEl.disabled = false;
+                } else {
+                    dualShowBackMiniFeedback('BACK selesai! Tekan "Simpan 2 Label".', false);
+                }
+                dualUpdateSaveState();
+            });
+        });
+    }
+
+    function dualCaptureForSide(side) {
+        if (!videoEl || !videoEl.videoWidth) {
+            if (captureBtn) captureBtn.disabled = false;
+            showCaptureFeedback('Kamera belum siap.', true);
+            return;
+        }
+
+        var vw = videoEl.videoWidth;
+        var vh = videoEl.videoHeight;
         var capCanvas = document.createElement('canvas');
-        capCanvas.width = sw;
-        capCanvas.height = sh;
-        capCanvas.getContext('2d').drawImage(videoEl, sx, sy, sw, sh, 0, 0, sw, sh);
-        // Manual rotate: simpan base horizontal, preview default 0 derajat, OCR eksplisit via Proses.
-        if (side === 'front') { dualBaseFront = capCanvas; dualDegFront = 0; }
-        else { dualBaseBack = capCanvas; dualDegBack = 0; }
+        capCanvas.width = vw;
+        capCanvas.height = vh;
+        var ctx = capCanvas.getContext('2d');
+        ctx.drawImage(videoEl, 0, 0, vw, vh);
+
+        if (side === 'front') {
+            dualBaseFront = capCanvas;
+            dualDegFront = 0;
+        } else {
+            dualBaseBack = capCanvas;
+            dualDegBack = 0;
+        }
         dualUpdateDegLabels();
+
         capCanvas.toBlob(function (blob) {
             if (captureBtn) captureBtn.disabled = false;
             if (!blob) {
                 if (side === 'front') dualBaseFront = null; else dualBaseBack = null;
-                showCaptureFeedback('Capture failed. Please try again.', true);
+                showCaptureFeedback('Capture gagal. Silakan coba lagi.', true);
                 return;
             }
             dualEnsureBaseStamp();
             var now = new Date();
-            var capDims = null;
-            try { capDims = guideEffectiveDims(); } catch (e) {}
+            var tId = (selectedTemplate && selectedTemplate.id) || 'AUTO';
+            var tName = (selectedTemplate && selectedTemplate.name) || 'Auto-Detected';
             var cap = {
                 blob: blob,
                 url: URL.createObjectURL(blob),
                 filename: dualBuildFilename(side),
-                templateId: selectedTemplate.id,
-                templateName: selectedTemplate.name,
-                widthCm: capDims ? capDims.cmW : selectedTemplate.width / 10,
-                heightCm: capDims ? capDims.cmH : selectedTemplate.height / 10,
-                widthPx: sw,
-                heightPx: sh,
+                templateId: tId,
+                templateName: tName,
+                widthCm: 3.5,
+                heightCm: 9.0,
+                widthPx: vw,
+                heightPx: vh,
                 filesize: blob.size,
                 capturedAt: now
             };
+
             if (side === 'front') {
                 dualRevokeSide('front');
                 lastCaptureFront = cap;
-                pendingOcrFront = null; dualFrontDone = false;
+                pendingOcrFront = null;
+                dualFrontDone = false;
                 dualSetBadge(dualFrontBadgeEl, 'idle', 'idle');
                 if (dualFrontThumbEl) dualFrontThumbEl.src = cap.url;
                 dualUpdateFrontMini();
                 try { stopCamera(); } catch (e) {}
-                if (dualFrontOcrEl) dualFrontOcrEl.textContent = 'Belum OCR — atur rotasi lalu tekan Proses.';
-                if (dualFrontTextEl) dualFrontTextEl.textContent = 'Belum OCR — atur rotasi lalu tekan Proses.';
+                if (dualFrontOcrEl) dualFrontOcrEl.textContent = 'Belum diproses — atur rotasi jika perlu, lalu tekan Simpan.';
+                if (dualFrontTextEl) dualFrontTextEl.textContent = 'Belum diproses — atur rotasi jika perlu, lalu tekan Simpan.';
                 dualSetStageInfo('front');
-                dualShowMiniFeedback('Atur rotasi lalu tekan Simpan.', false);
+                dualShowMiniFeedback('Atur rotasi jika perlu, lalu tekan Simpan.', false);
                 if (dualNextToBackEl) dualNextToBackEl.disabled = true;
                 dualSetRotateUI('front', true);
                 dualSetProcessUI('front', true);
@@ -2727,15 +2768,16 @@
             } else {
                 dualRevokeSide('back');
                 lastCaptureBack = cap;
-                pendingOcrBack = null; dualBackDone = false;
+                pendingOcrBack = null;
+                dualBackDone = false;
                 dualSetBadge(dualBackBadgeEl, 'idle', 'idle');
-                if (dualBackTextEl) dualBackTextEl.textContent = 'Belum OCR — atur rotasi lalu tekan Proses.';
+                if (dualBackTextEl) dualBackTextEl.textContent = 'Belum diproses — atur rotasi jika perlu, lalu tekan Simpan.';
                 try { stopCamera(); } catch (e) {}
                 flashEffect();
                 dualSetStageInfo('back');
                 dualShowBackMini(cap);
-                if (dualBackOcrEl) dualBackOcrEl.textContent = 'Belum OCR — atur rotasi lalu tekan Proses.';
-                dualShowBackMiniFeedback('Atur rotasi lalu tekan Simpan.', false);
+                if (dualBackOcrEl) dualBackOcrEl.textContent = 'Belum diproses — atur rotasi jika perlu, lalu tekan Simpan.';
+                dualShowBackMiniFeedback('Atur rotasi jika perlu, lalu tekan Simpan.', false);
                 dualSetRotateUI('back', true);
                 dualSetProcessUI('back', true);
                 splitSetAdjustVisible('back', true);
@@ -4668,7 +4710,9 @@
         if (continueBtn) continueBtn.addEventListener('click', goToScanStep);
         if (changeTemplateBtn) changeTemplateBtn.addEventListener('click', goToSelectStep);
 
-        if (createNewBtn) createNewBtn.addEventListener('click', showTemplateStep);
+        if (createNewBtn) createNewBtn.addEventListener('click', goToScanStep);
+        var backToMenuFromScanBtn = document.getElementById('back-to-menu-from-scan');
+        if (backToMenuFromScanBtn) backToMenuFromScanBtn.addEventListener('click', backToMenuFromScan);
         // Jalur B: Choose Label Reference — daftar + pakai tanpa scan ulang
         if (chooseBtn) chooseBtn.addEventListener('click', openChoosePanel);
         if (chooseRefreshBtn) chooseRefreshBtn.addEventListener('click', refreshChooseList);

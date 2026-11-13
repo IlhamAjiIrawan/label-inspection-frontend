@@ -41,6 +41,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/references-library', [ReferenceController::class, 'library'])->middleware('throttle:30,1');
     Route::get('/references-library/health', [ReferenceController::class, 'libraryHealth'])->middleware('throttle:30,1');
     Route::post('/references/import', [ReferenceController::class, 'importFromLibrary'])->middleware('throttle:15,1');
+    Route::post('/references/detect-regions', [ReferenceController::class, 'detectRegions'])->middleware('throttle:30,1');
     Route::post('/references/batch', [ReferenceController::class, 'storeBatch'])->middleware('throttle:10,1');
     Route::post('/references/activate', [ReferenceController::class, 'activate'])->middleware('throttle:15,1');
     Route::delete('/references-library/{ref_id}', [ReferenceController::class, 'destroyLibrary'])->middleware('throttle:15,1');

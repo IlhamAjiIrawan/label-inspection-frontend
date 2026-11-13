@@ -2113,7 +2113,26 @@
         }, 'image/png');
     }
 
-    // ===== Auto Crop helpers — tiru Reference splitLongSide (belah tengah sisi panjang, 0px overlap) =====
+    // ===== Auto Crop helpers — Auto-Detect OpenCV & Fallback =====
+    // Konversi Base64 Data URL menjadi Blob (untuk crop auto-detect OpenCV)
+    function dataUrlToBlob(dataUrl) {
+        if (!dataUrl) return null;
+        try {
+            var parts = dataUrl.split(',');
+            var mime = (parts[0].match(/:(.*?);/) || ['', 'image/png'])[1];
+            var bstr = atob(parts[1]);
+            var n = bstr.length;
+            var u8arr = new Uint8Array(n);
+            while (n--) {
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            return new Blob([u8arr], { type: mime });
+        } catch (e) {
+            console.error('[CHECK] dataUrlToBlob error:', e);
+            return null;
+        }
+    }
+
     // Input canvas final (hasil rotate). Output {c1,c2,horizontal} atau null bila gagal.
     function checkSplitLongSide(finalCanvas) {
         if (!finalCanvas || !finalCanvas.width || !finalCanvas.height) return null;
@@ -2231,7 +2250,8 @@
 
     function checkSplitMetaText(cap) {
         if (!cap) return '-';
-        return (cap.w || '-') + '×' + (cap.h || '-') + ' px · ' + (cap.filename || '-');
+        var tag = cap.isFallback === false ? ' (OpenCV)' : (cap.isFallback === true ? ' (Auto)' : '');
+        return (cap.w || '-') + '×' + (cap.h || '-') + ' px' + tag + ' · ' + (cap.filename || '-');
     }
 
     // Render 2 split sisi itu ke panel Sesi 1 (front) dan/atau kolom hasil. Dipanggil setelah crop sukses.
@@ -2242,7 +2262,7 @@
             if (wrapS1 && s1 && s2) {
                 wrapS1.classList.remove('hidden');
                 var rev = document.getElementById('check-session1-split-review');
-                if (rev && checkFrontCapture) rev.src = checkFrontCapture.url;
+                if (rev && checkFrontCapture) rev.src = checkFrontCapture.annotatedUrl || checkFrontCapture.url;
                 var i1 = document.getElementById('check-session1-split-img-1');
                 if (i1) { i1.src = s1.url; i1.classList.remove('hidden'); }
                 var i2 = document.getElementById('check-session1-split-img-2');
@@ -2278,7 +2298,7 @@
             if (wrapS2 && s1 && s2) {
                 wrapS2.classList.remove('hidden');
                 var v2 = document.getElementById('check-session2-split-review');
-                if (v2 && checkBackCapture) v2.src = checkBackCapture.url;
+                if (v2 && checkBackCapture) v2.src = checkBackCapture.annotatedUrl || checkBackCapture.url;
                 var n1 = document.getElementById('check-session2-split-img-1');
                 if (n1) { n1.src = s1.url; n1.classList.remove('hidden'); }
                 var n2 = document.getElementById('check-session2-split-img-2');
@@ -2311,14 +2331,14 @@
         }
     }
 
-    // Fungsi inti: satu fungsi untuk 3 tombol Crop. Belah master final rotate jadi Label 1 + Label 2.
+    // Fungsi inti: satu fungsi untuk tombol Simpan. Deteksi & belah master final rotate jadi Label 1 + Label 2 (OpenCV Auto-Detect).
     function checkCropSide(side, opts) {
-        var skipOcr = !!(opts && opts.skipOcr); // display phase Sesi 2: crop tampil tanpa kirim OCR (pemanggil lama tanpa opts = perilaku 100% sama)
+        var skipOcr = !!(opts && opts.skipOcr); // display phase Sesi 2: crop tampil tanpa kirim OCR
         var base = side === 'back' ? checkBaseBack : checkBaseFront;
         var deg = side === 'back' ? checkDegBack : checkDegFront;
         var cap = side === 'back' ? checkBackCapture : checkFrontCapture;
         if (!base || !cap || !cap.blob || !cap.filename_original) {
-            checkFeedback('Capture dan atur rotasi dulu sebelum crop.', true);
+            checkFeedback('Capture dan atur rotasi dulu sebelum simpan.', true);
             return;
         }
         if (checkGetSplitBusy(side)) return;
@@ -2333,47 +2353,93 @@
             checkFeedback('Crop gagal. Coba lagi.', true);
             return;
         }
-        var parts = checkSplitLongSide(finalCanvas);
-        if (!parts) {
-            checkSetSplitBusy(side, false);
-            checkSetCropUI(side, true);
-            checkSetRotateUI(side, true);
-            checkFeedback('Crop gagal. Coba lagi.', true);
-            return;
-        }
-        var c1 = parts.c1, c2 = parts.c2;
-        var w1 = c1.width, h1 = c1.height, w2 = c2.width, h2 = c2.height;
-        c1.toBlob(function (blob1) {
-            if (!blob1) {
+
+        checkFeedback('Mendeteksi label & meluruskan otomatis (OpenCV)...', false);
+
+        finalCanvas.toBlob(function (blob) {
+            if (!blob) {
                 checkSetSplitBusy(side, false);
                 checkSetCropUI(side, true);
                 checkSetRotateUI(side, true);
-                checkFeedback('Crop gagal. Coba lagi.', true);
+                checkFeedback('Gagal mengolah gambar.', true);
                 return;
             }
-            c2.toBlob(function (blob2) {
-                if (!blob2) {
+
+            var fd = new FormData();
+            fd.append('image', blob, 'process-' + side + '.png');
+            var token = checkGetToken();
+            var headers = token ? { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } : { 'Accept': 'application/json' };
+
+            fetch('/api/check/detect-regions', {
+                method: 'POST',
+                headers: headers,
+                body: fd
+            })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (data) {
+                if (!data || !data.success || !data.slots || data.slots.length < 2) {
+                    var msg = (data && data.message) ? data.message : 'Gagal mendeteksi label.';
+                    checkFeedback(msg + ' Coba atur rotasi atau retake.', true);
                     checkSetSplitBusy(side, false);
                     checkSetCropUI(side, true);
                     checkSetRotateUI(side, true);
-                    checkFeedback('Crop gagal. Coba lagi.', true);
                     return;
                 }
+
+                var slot1 = data.slots[0];
+                var slot2 = data.slots[1];
+                var blob1 = dataUrlToBlob(slot1.crop_data_url);
+                var blob2 = dataUrlToBlob(slot2.crop_data_url);
+
+                if (!blob1 || !blob2) {
+                    checkFeedback('Gagal memproses potongan gambar.', true);
+                    checkSetSplitBusy(side, false);
+                    checkSetCropUI(side, true);
+                    checkSetRotateUI(side, true);
+                    return;
+                }
+
                 // Buang split lama sisi itu dulu (crop ulang aman)
                 [1, 2].forEach(function (idx) {
                     var old = checkGetSplit(side, idx);
                     if (old && old.url) { try { URL.revokeObjectURL(old.url); } catch (e) {} }
                 });
+
+                if (cap) {
+                    cap.annotatedUrl = data.annotated_preview || null;
+                }
+
                 var f1 = checkSplitFilename(cap.filename_original, side === 'back' ? 'back' : 'front', 1);
                 var f2 = checkSplitFilename(cap.filename_original, side === 'back' ? 'back' : 'front', 2);
-                checkSetSplit(side, 1, { blob: blob1, url: URL.createObjectURL(blob1), filename: f1, w: w1, h: h1, size: blob1.size });
-                checkSetSplit(side, 2, { blob: blob2, url: URL.createObjectURL(blob2), filename: f2, w: w2, h: h2, size: blob2.size });
+                checkSetSplit(side, 1, {
+                    blob: blob1,
+                    url: URL.createObjectURL(blob1),
+                    filename: f1,
+                    w: slot1.w,
+                    h: slot1.h,
+                    size: blob1.size,
+                    isFallback: !!slot1.is_fallback
+                });
+                checkSetSplit(side, 2, {
+                    blob: blob2,
+                    url: URL.createObjectURL(blob2),
+                    filename: f2,
+                    w: slot2.w,
+                    h: slot2.h,
+                    size: blob2.size,
+                    isFallback: !!slot2.is_fallback
+                });
                 checkRenderSplitSide(side);
+
                 // Split OCR per Label: kirim 2 crop ke FastAPI single OCR (async, tidak blokir UI).
                 // Fase display Sesi 2 (skipOcr) melewati baris ini — tanpa request, tanpa teks OCR.
                 if (!skipOcr) {
                     try { checkSplitOcrFor(side); } catch (e) { console.warn('[CHECK SPLIT] trigger failed', e); }
                 }
+
                 // FRONT Sesi 1: sembunyikan section single (master + rotate + Simpan) setelah crop sukses —
                 // mirip Reference (adjust disembunyikan setelah Simpan). Ulangi via Retake Front.
                 // Crop sukses = gate terpenuhi → aktifkan Lanjut ke Capture 2.
@@ -2395,13 +2461,21 @@
                     var s2FbOk = document.getElementById('check-session2-feedback');
                     if (s2FbOk) s2FbOk.textContent = '';
                 }
-                var orient = parts.horizontal ? 'horizontal' : 'vertical';
-                checkFeedback('Crop ' + side + ' jadi Label 1 + Label 2 (' + orient + '). Siap diproses.', false);
-                console.log('[CHECK] crop', side, 'Label1+2', f1, f2);
+
+                var tag = (slot1.is_fallback || slot2.is_fallback) ? '(Auto)' : '(OpenCV)';
+                checkFeedback('Label ' + side + ' terdeteksi ' + tag + '! Siap diproses.', false);
+                console.log('[CHECK] auto-detected & cropped', side, f1, f2);
                 checkSetSplitBusy(side, false);
                 checkSetCropUI(side, true);
                 checkSetRotateUI(side, true);
-            }, 'image/png');
+            })
+            .catch(function (err) {
+                console.error('[CHECK] Auto-detect failed:', err);
+                checkFeedback('Gagal deteksi otomatis. Coba atur rotasi atau retake.', true);
+                checkSetSplitBusy(side, false);
+                checkSetCropUI(side, true);
+                checkSetRotateUI(side, true);
+            });
         }, 'image/png');
     }
 

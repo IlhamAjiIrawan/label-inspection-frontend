@@ -60,6 +60,9 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:15,1');
 
     // Checking split OCR per Label (Label 1 & Label 2 per sisi) — single flow FastAPI.
+    // Opsi C (Snap & Auto-Detect OpenCV): deteksi & pelurusan wilayah label
+    Route::post('/check/detect-regions', [ReferenceController::class, 'detectRegions'])
+        ->middleware('throttle:30,1');
     // FIX 429 (2026-10-08): named limiter per-route agar polling status
     // tidak memakan kuota preview. Definisi di RouteServiceProvider.
     Route::post('/check/split-preview', [CheckSplitOcrController::class, 'preview'])
